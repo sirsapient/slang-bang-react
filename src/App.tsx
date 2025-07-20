@@ -1,92 +1,134 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { gameState } from './game/gameState';
-import { TradingSystem } from './game/systems/trading';
-import { gameData } from './game/data/gameData';
-import PlayerStats from './components/PlayerStats';
-import InventoryModal from './components/InventoryModal';
-import Market from './components/Market';
+import { useGame } from './contexts/GameContext';
+import Navigation from './components/Navigation';
+import HomeScreen from './screens/HomeScreen';
+import MarketScreen from './screens/MarketScreen';
+import TravelScreen from './screens/TravelScreen';
+import InventoryScreen from './screens/InventoryScreen';
+import GangScreen from './screens/GangScreen';
+import BasesScreen from './screens/BasesScreen';
+import AssetsScreen from './screens/AssetsScreen';
+import TradingScreen from './screens/TradingScreen';
+import RaidScreen from './screens/RaidScreen';
+import MailScreen from './screens/MailScreen';
 import './App.css';
 
-function App() {
-  const [isInventoryOpen, setInventoryOpen] = useState(false);
-  const [, forceUpdate] = useState(0); // Used to force re-render
+function GameContent() {
+  const { state, systems, updateGameState, refreshUI } = useGame();
+  const [currentScreen, setCurrentScreen] = useState('home');
 
-  // Dummy advanceDay function for now (implement your own logic as needed)
-  const advanceDay = () => {
-    // Example: increment day and save
-    gameState.data.day += 1;
-    gameState.save();
-    forceUpdate(x => x + 1);
-  };
-
+  // Initialize game on mount
   useEffect(() => {
-    const tradingSystem = new TradingSystem(gameState, null, gameData);
     const initializeGame = () => {
-      console.log('Initializing game...');
-      // Try to load saved game
+      // Load saved game
       const loaded = gameState.load();
       // Check if we need to generate prices
-      const needsPriceGeneration = !gameState.cityPrices ||
-        Object.keys(gameState.cityPrices).length === 0 ||
-        Object.values(gameState.cityPrices).some(cityPrices =>
-          !cityPrices || Object.keys(cityPrices).length === 0
-        );
-      if (needsPriceGeneration) {
-        console.log('Generating city prices...');
-        tradingSystem.generateAllCityPrices();
-        // Save immediately after generating prices
+      if (!gameState.cityPrices || Object.keys(gameState.cityPrices).length === 0) {
+        systems.trading.generateAllCityPrices();
         gameState.save();
-        console.log('Prices generated and saved:', gameState.cityPrices);
       }
-      // Set up auto-save
-      const autoSaveInterval = setInterval(() => {
-        gameState.save();
-      }, 10000); // Save every 10 seconds
-      // Set up real-time game loop
+      // Start game timers
       const gameTimer = setInterval(() => {
         advanceDay();
-      }, 60000); // 60 seconds per day
+      }, 60000);
       const countdownTimer = setInterval(() => {
         gameState.timeRemaining -= 1000;
         if (gameState.timeRemaining <= 0) {
           gameState.timeRemaining = 60000;
         }
-        // Force re-render for countdown
-        forceUpdate(x => x + 1);
+        refreshUI();
       }, 1000);
-      // Store timers for cleanup
+      const autoSaveTimer = setInterval(() => {
+        gameState.save();
+      }, 10000);
+      // Store timers
       gameState.gameTimer = gameTimer;
       gameState.countdownTimer = countdownTimer;
       return () => {
-        clearInterval(autoSaveInterval);
         clearInterval(gameTimer);
         clearInterval(countdownTimer);
+        clearInterval(autoSaveTimer);
       };
     };
-    // Initialize the game
-    const cleanup = initializeGame();
-    return cleanup;
-  }, []); // Empty dependency array - only run once on mount
+    return initializeGame();
+  }, [systems, refreshUI]);
+
+  // Advance day function
+  const advanceDay = () => {
+    const newDay = state.day + 1;
+    updateGameState('day', newDay);
+    updateGameState('daysInCurrentCity', state.daysInCurrentCity + 1);
+    updateGameState('daysSinceTravel', state.daysSinceTravel + 1);
+    // Apply daily systems
+    systems.heat.applyWarrantDecay();
+    systems.bases.generateDailyIncome();
+    systems.trading.updateMarketPrices();
+    refreshUI();
+  };
+
+  // Handle screen navigation
+  const navigateToScreen = (screen: string) => {
+    setCurrentScreen(screen);
+    updateGameState('currentScreen', screen);
+  };
+
+  // Render current screen
+  const renderScreen = () => {
+    switch (currentScreen) {
+      case 'home':
+        return <HomeScreen onNavigate={navigateToScreen} />;
+      case 'market':
+        return <MarketScreen onNavigate={navigateToScreen} />;
+      case 'travel':
+        return <TravelScreen onNavigate={navigateToScreen} />;
+      case 'inventory':
+        return <InventoryScreen onNavigate={navigateToScreen} />;
+      case 'gang':
+        return <GangScreen onNavigate={navigateToScreen} />;
+      case 'bases':
+        return <BasesScreen onNavigate={navigateToScreen} />;
+      case 'assets':
+        return <AssetsScreen onNavigate={navigateToScreen} />;
+      case 'trading':
+        return <TradingScreen onNavigate={navigateToScreen} />;
+      case 'raid':
+        return <RaidScreen onNavigate={navigateToScreen} />;
+      case 'mail':
+        return <MailScreen onNavigate={navigateToScreen} />;
+      default:
+        return <HomeScreen onNavigate={navigateToScreen} />;
+    }
+  };
 
   return (
-    <div>
-      <h1>Slang & Bang (React Port)</h1>
-      <PlayerStats
-        playerName={gameState.data.playerName}
-        cash={gameState.data.cash}
-        currentCity={gameState.data.currentCity}
-        day={gameState.data.day}
-        heatLevel={gameState.data.heatLevel}
+    <div className="phone-container">
+      <div className="status-bar">
+        <div>🔐 Secure</div>
+        <div id="phoneTime">{new Date().toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        })}</div>
+        <div>🔋 100%</div>
+      </div>
+      <div className="header">
+        <div className="game-title">💊 SLANG AND BANG</div>
+        <div className="subtitle">Drug Empire Simulator</div>
+      </div>
+      <div className="screen-container">
+        {renderScreen()}
+      </div>
+      <Navigation 
+        currentScreen={currentScreen} 
+        onNavigate={navigateToScreen}
       />
-      <button onClick={() => setInventoryOpen(true)}>Show Inventory</button>
-      <InventoryModal
-        inventory={gameState.data.inventory}
-        isOpen={isInventoryOpen}
-        onClose={() => setInventoryOpen(false)}
-      />
-      <Market cityPrices={gameState.cityPrices[gameState.data.currentCity] || {}} />
     </div>
   );
+}
+
+function App() {
+  return <GameContent />;
 }
 
 export default App;
