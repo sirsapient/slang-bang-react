@@ -122,18 +122,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   });
 
   // Sync React state back to gameState
-  useEffect(() => {
-    // Update gameState.data when React state changes
-    Object.keys(state).forEach(key => {
-      if (key !== 'lastUpdate' && key !== 'cityPrices') {
-        gameState.data[key] = state[key];
-      }
-    });
-    // Update cityPrices separately
-    if (state.cityPrices) {
-      gameState.cityPrices = state.cityPrices;
-    }
-  }, [state]);
+  // useEffect(() => {
+  //   // Update gameState.data when React state changes
+  //   Object.keys(state).forEach(key => {
+  //     if (key !== 'lastUpdate' && key !== 'cityPrices') {
+  //       gameState.data[key] = state[key];
+  //     }
+  //   });
+  //   // Update cityPrices separately
+  //   if (state.cityPrices) {
+  //     gameState.cityPrices = state.cityPrices;
+  //   }
+  // }, [state]);
 
   // Override gameState methods to use React dispatch
   useEffect(() => {

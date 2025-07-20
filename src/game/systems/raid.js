@@ -4,7 +4,15 @@ export class RaidSystem {
         this.state = state;
         this.events = events;
         this.data = data;
-        this.enemyBases = this.generateEnemyBases();
+        // Persist enemyBases for the session
+        if (typeof window !== 'undefined') {
+            if (!window.enemyBases) {
+                window.enemyBases = this.generateEnemyBases();
+            }
+            this.enemyBases = window.enemyBases;
+        } else {
+            this.enemyBases = this.generateEnemyBases();
+        }
     }
     
     generateEnemyBases() {

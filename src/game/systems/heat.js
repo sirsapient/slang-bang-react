@@ -17,8 +17,7 @@ export class HeatSystem {
         const warrantHeat = Math.min(this.state.get('warrant') / 10000, 50);
         const timeHeat = Math.max(0, this.state.get('daysInCurrentCity') - 3) * 5;
         const totalHeat = warrantHeat + timeHeat;
-        this.state.set('heatLevel', Math.min(100, totalHeat));
-        return this.state.get('heatLevel');
+        return Math.min(100, totalHeat);
     }
 
     /**

@@ -28,6 +28,8 @@ function GameContent() {
         systems.trading.generateAllCityPrices();
         gameState.save();
       }
+      // Sync cityPrices to React state
+      updateGameState('cityPrices', gameState.cityPrices);
       // Start game timers
       const gameTimer = setInterval(() => {
         advanceDay();
@@ -52,7 +54,7 @@ function GameContent() {
       };
     };
     return initializeGame();
-  }, [systems, refreshUI]);
+  }, []);
 
   // Advance day function
   const advanceDay = () => {
@@ -69,6 +71,7 @@ function GameContent() {
 
   // Handle screen navigation
   const navigateToScreen = (screen: string) => {
+    console.log('navigateToScreen called with:', screen);
     setCurrentScreen(screen);
     updateGameState('currentScreen', screen);
   };
