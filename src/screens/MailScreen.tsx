@@ -1,132 +1,382 @@
-import React, { useState, useEffect } from 'react';
-import { useGame } from '../contexts/GameContext';
+import React, { useState } from 'react';
+import { useGame, useCurrentCity } from '../contexts/GameContext';
 
 interface MailScreenProps {
   onNavigate: (screen: string) => void;
 }
 
+interface Notification {
+  id: string;
+  message: string;
+  type: 'success' | 'warning' | 'error' | 'info';
+  timestamp: number;
+  read: boolean;
+}
+
+interface EventLog {
+  text: string;
+  type: 'good' | 'bad' | 'neutral';
+  timestamp: number;
+  day: number;
+}
+
 export default function MailScreen({ onNavigate }: MailScreenProps) {
   const { state, events, refreshUI } = useGame();
+  const currentCity = useCurrentCity();
+  const [activeTab, setActiveTab] = useState<'notifications' | 'events'>('notifications');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  
   const notifications = state.notifications || [];
-  const eventLog = events.events || [];
-  const [showModal, setShowModal] = useState(false);
-  const [modalNotification, setModalNotification] = useState<any>(null);
-
-  // Mark notification as read
-  const markAsRead = (id: number) => {
-    if (state.markNotificationAsRead) {
-      state.markNotificationAsRead(id);
+  const eventLog = events.getRecentEvents(50) || [];
+  
+  const handleMarkRead = (notificationId: string) => {
+    const notification = notifications.find((n: Notification) => n.id === notificationId);
+    if (notification) {
+      notification.read = true;
       refreshUI();
     }
   };
-
-  // Clear all notifications
-  const clearAll = () => {
-    if (state.clearNotifications) {
-      state.clearNotifications();
-      setShowModal(false);
-      setModalNotification(null);
-      refreshUI();
+  
+  const handleMarkAllRead = () => {
+    notifications.forEach((notification: Notification) => {
+      notification.read = true;
+    });
+    refreshUI();
+  };
+  
+  const handleClearAll = () => {
+    state.notifications = [];
+    refreshUI();
+    setShowClearConfirm(false);
+  };
+  
+  const handleClearEvents = () => {
+    events.clear();
+    refreshUI();
+  };
+  
+  const unreadCount = notifications.filter((n: Notification) => !n.read).length;
+  
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success': return '✅';
+      case 'warning': return '⚠️';
+      case 'error': return '❌';
+      default: return 'ℹ️';
     }
   };
-
-  // Close modal if notifications are cleared or modalNotification is null
-  useEffect(() => {
-    if (notifications.length === 0 || !modalNotification) {
-      setShowModal(false);
-      setModalNotification(null);
+  
+  const getEventIcon = (type: string) => {
+    switch (type) {
+      case 'good': return '✅';
+      case 'bad': return '❌';
+      default: return 'ℹ️';
     }
-  }, [notifications, modalNotification]);
-
+  };
+  
+  const formatTimestamp = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
+  
   return (
     <div className="mail-screen">
       <div className="screen-header">
         <button className="back-button" onClick={() => onNavigate('home')}>
           ← Back
         </button>
-        <h3>📧 Mail & Notifications</h3>
-        <div style={{ fontSize: '12px', color: '#aaa' }}>Your messages and event log</div>
+        <h3>📧 Mail & Events</h3>
+        <div style={{ fontSize: '12px', color: '#aaa' }}>Notifications and Activity Log</div>
       </div>
-
-      {/* Notifications */}
-      <div style={{ marginBottom: '20px' }}>
-        <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px' }}>Notifications</div>
-        {notifications.length === 0 && <div style={{ color: '#666' }}>No notifications yet.</div>}
-        {notifications.length > 0 && (
-          <button className="action-btn" style={{ marginBottom: '10px' }} onClick={clearAll}>
-            Clear All
-          </button>
-        )}
-        {notifications.map((n: any) => (
-          <div key={n.id} style={{
-            background: n.read ? '#222' : '#333',
-            border: '1px solid #444',
-            borderRadius: '8px',
+      
+      {/* Tab Navigation */}
+      <div style={{
+        display: 'flex',
+        marginBottom: '20px',
+        background: '#222',
+        borderRadius: '10px',
+        padding: '5px'
+      }}>
+        <button
+          onClick={() => setActiveTab('notifications')}
+          style={{
+            flex: 1,
             padding: '10px',
-            marginBottom: '8px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            opacity: n.read ? 0.7 : 1,
-            cursor: 'pointer'
+            background: activeTab === 'notifications' ? '#333' : 'transparent',
+            color: activeTab === 'notifications' ? '#fff' : '#aaa',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '14px'
           }}
-            onClick={() => { setShowModal(true); setModalNotification(n); }}
-          >
-            <div>
-              <div style={{ fontWeight: 'bold', color: n.type === 'error' ? '#ff6666' : n.type === 'success' ? '#66ff66' : '#ffff00' }}>{n.message}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>Day {n.day} • {new Date(n.timestamp).toLocaleString()}</div>
-            </div>
-            {!n.read && (
-              <button className="action-btn" style={{ background: '#00ff00', color: '#000', fontSize: '12px' }} onClick={e => { e.stopPropagation(); markAsRead(n.id); }}>
-                Mark Read
-              </button>
-            )}
-          </div>
-        ))}
+        >
+          📧 Notifications {unreadCount > 0 && `(${unreadCount})`}
+        </button>
+        <button
+          onClick={() => setActiveTab('events')}
+          style={{
+            flex: 1,
+            padding: '10px',
+            background: activeTab === 'events' ? '#333' : 'transparent',
+            color: activeTab === 'events' ? '#fff' : '#aaa',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          📋 Event Log
+        </button>
       </div>
-
-      {/* Notification Modal */}
-      {showModal && modalNotification != null && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+      
+      {/* Notifications Tab */}
+      {activeTab === 'notifications' && (
+        <div>
+          {/* Header Actions */}
+          <div style={{
+            display: 'flex',
+            gap: '10px',
+            marginBottom: '15px'
+          }}>
+            <button
+              className="action-btn"
+              onClick={handleMarkAllRead}
+              disabled={unreadCount === 0}
+              style={{
+                fontSize: '12px',
+                padding: '8px 12px',
+                background: unreadCount === 0 ? '#444' : '#333'
+              }}
+            >
+              Mark All Read
+            </button>
+            <button
+              className="action-btn"
+              onClick={() => setShowClearConfirm(true)}
+              disabled={notifications.length === 0}
+              style={{
+                fontSize: '12px',
+                padding: '8px 12px',
+                background: notifications.length === 0 ? '#444' : '#ff6666',
+                color: '#000'
+              }}
+            >
+              Clear All
+            </button>
+          </div>
+          
+          {/* Notifications List */}
+          {notifications.length === 0 ? (
+            <div style={{
+              background: '#222',
+              border: '1px solid #444',
+              borderRadius: '10px',
+              padding: '20px',
+              textAlign: 'center',
+              color: '#666'
+            }}>
+              <div style={{ fontSize: '16px', marginBottom: '10px' }}>
+                No notifications
+              </div>
+              <div style={{ fontSize: '12px', color: '#aaa' }}>
+                Notifications will appear here when important events occur
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: '20px' }}>
+              {notifications.map((notification: Notification) => (
+                <div key={notification.id} style={{
+                  background: notification.read ? '#222' : '#1a1a1a',
+                  border: notification.read ? '1px solid #444' : '1px solid #666',
+                  borderRadius: '10px',
+                  padding: '15px',
+                  marginBottom: '10px',
+                  position: 'relative'
+                }}>
+                  {!notification.read && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      width: '8px',
+                      height: '8px',
+                      background: '#66ff66',
+                      borderRadius: '50%'
+                    }} />
+                  )}
+                  
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{ fontSize: '16px', marginTop: '2px' }}>
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: '14px',
+                        color: notification.read ? '#aaa' : '#fff',
+                        marginBottom: '5px',
+                        lineHeight: '1.4'
+                      }}>
+                        {notification.message}
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#666',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span>{formatTimestamp(notification.timestamp)}</span>
+                        {!notification.read && (
+                          <button
+                            onClick={() => handleMarkRead(notification.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#66ff66',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            Mark Read
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Events Tab */}
+      {activeTab === 'events' && (
+        <div>
+          {/* Header Actions */}
+          <div style={{
+            display: 'flex',
+            gap: '10px',
+            marginBottom: '15px'
+          }}>
+            <button
+              className="action-btn"
+              onClick={handleClearEvents}
+              disabled={eventLog.length === 0}
+              style={{
+                fontSize: '12px',
+                padding: '8px 12px',
+                background: eventLog.length === 0 ? '#444' : '#ff6666',
+                color: '#000'
+              }}
+            >
+              Clear Log
+            </button>
+          </div>
+          
+          {/* Events List */}
+          {eventLog.length === 0 ? (
+            <div style={{
+              background: '#222',
+              border: '1px solid #444',
+              borderRadius: '10px',
+              padding: '20px',
+              textAlign: 'center',
+              color: '#666'
+            }}>
+              <div style={{ fontSize: '16px', marginBottom: '10px' }}>
+                No events logged
+              </div>
+              <div style={{ fontSize: '12px', color: '#aaa' }}>
+                Game events will be logged here as they occur
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: '20px' }}>
+              {eventLog.map((event: any, index: number) => (
+                <div key={`${event.timestamp}-${index}`} style={{
+                  background: '#222',
+                  border: '1px solid #444',
+                  borderRadius: '10px',
+                  padding: '15px',
+                  marginBottom: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{ fontSize: '16px', marginTop: '2px' }}>
+                      {getEventIcon(event.type)}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: '14px',
+                        color: event.type === 'good' ? '#66ff66' : event.type === 'bad' ? '#ff6666' : '#aaa',
+                        marginBottom: '5px',
+                        lineHeight: '1.4'
+                      }}>
+                        {event.text}
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#666'
+                      }}>
+                        {formatTimestamp(event.timestamp)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Clear All Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Notification</span>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <span className="modal-title">🗑️ Clear All Notifications</span>
+              <button className="modal-close" onClick={() => setShowClearConfirm(false)}>×</button>
             </div>
-            <div className="modal-body" style={{ textAlign: 'center', padding: '20px' }}>
-              <div style={{ fontWeight: 'bold', color: modalNotification.type === 'error' ? '#ff6666' : modalNotification.type === 'success' ? '#66ff66' : '#ffff00', fontSize: '18px', marginBottom: '10px' }}>{modalNotification.message}</div>
-              <div style={{ color: '#aaa', marginBottom: '10px' }}>Day {modalNotification.day} • {new Date(modalNotification.timestamp).toLocaleString()}</div>
-              <button className="action-btn" onClick={() => setShowModal(false)}>
-                Close
-              </button>
+            <div className="modal-body">
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '16px', marginBottom: '15px' }}>
+                  Are you sure you want to clear all notifications?
+                </div>
+                <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '20px' }}>
+                  This action cannot be undone.
+                </div>
+                
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={handleClearAll}
+                    className="action-btn"
+                    style={{ flex: 1, background: '#ff6666', color: '#000' }}
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={() => setShowClearConfirm(false)}
+                    className="action-btn"
+                    style={{ flex: 1, background: '#666' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* Event Log */}
-      <div style={{ marginBottom: '20px' }}>
-        <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px' }}>Event Log</div>
-        {eventLog.length === 0 && <div style={{ color: '#666' }}>No events yet.</div>}
-        {eventLog.slice().reverse().map((e: any, idx: number) => (
-          <div key={e.timestamp + '-' + idx} style={{
-            background: '#222',
-            border: '1px solid #444',
-            borderRadius: '8px',
-            padding: '10px',
-            marginBottom: '8px',
-            color: e.type === 'bad' ? '#ff6666' : e.type === 'good' ? '#66ff66' : '#aaa',
-            fontSize: '13px'
-          }}>
-            <div style={{ fontWeight: 'bold' }}>{e.text}</div>
-            <div style={{ fontSize: '11px', color: '#aaa' }}>Day {e.day} • {new Date(e.timestamp).toLocaleString()}</div>
-          </div>
-        ))}
-      </div>
-
-      <button className="action-btn" onClick={() => onNavigate('home')} style={{ width: '100%', marginTop: '10px' }}>
-        Back to Home
-      </button>
     </div>
   );
 } 

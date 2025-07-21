@@ -1,318 +1,428 @@
 import React, { useState } from 'react';
-import { useGame, useCash, useCurrentCity } from '../contexts/GameContext';
+import { useGame, useCurrentCity, useCash } from '../contexts/GameContext';
 import { gameData } from '../game/data/gameData';
 
 interface AssetsScreenProps {
   onNavigate: (screen: string) => void;
 }
 
+interface Asset {
+  id: string;
+  name: string;
+  type: string;
+  cost: number;
+  flexValue: number;
+  city?: string;
+  description?: string;
+}
+
 export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
-  const { state, systems, refreshUI, events } = useGame();
-  const cash = useCash();
+  const { state, systems, events, refreshUI } = useGame();
   const currentCity = useCurrentCity();
+  const cash = useCash();
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showBuyModal, setShowBuyModal] = useState(false);
-  const [buyAsset, setBuyAsset] = useState<any>(null);
   const [showSellModal, setShowSellModal] = useState(false);
-  const [sellAsset, setSellAsset] = useState<any>(null);
-  const [showError, setShowError] = useState<string | null>(null);
-
-  // Asset summary
-  const assetSummary = systems.assets.getAssetSummary();
-  const flexScore = assetSummary.flexScore;
-  const totalValue = assetSummary.totalValue;
-  const jewelryCount = assetSummary.jewelryCount;
-  const carCount = assetSummary.carCount;
-  const propertyCount = assetSummary.propertyCount;
-  const wearingJewelry = systems.assets.getWornJewelry();
-
-  // Asset unlocks
-  const playerRank = systems.assets.getCurrentPlayerRank();
-  const canBuyCars = playerRank >= 4;
-  const canBuyProperties = playerRank >= 4;
-
-  // Available assets
-  const jewelryAssets = systems.assets.getAssetsByType('jewelry');
-  const carAssets = systems.assets.getAssetsByType('car');
-  const propertyAssets = systems.assets.getAssetsByType('property');
-
-  // Owned assets
-  const ownedAssets = systems.assets.getAllOwnedInstances();
-
-  // Buy handler
-  const handleBuy = (asset: any) => {
-    setBuyAsset(asset);
-    setShowBuyModal(true);
-  };
-  const confirmBuy = () => {
-    if (!buyAsset) return;
-    const result = systems.assets.purchaseAsset(buyAsset.id);
-    if (!result.success && result.error) {
-      setShowError(result.error);
-    } else {
-      setShowBuyModal(false);
-      setBuyAsset(null);
-      setShowError(null);
-      refreshUI();
+  
+  const assets = state.assets || {};
+  const wornJewelry = state.wornJewelry || [];
+  
+  const assetTypes = {
+    jewelry: {
+      name: 'Jewelry',
+      emoji: '💎',
+      items: [
+        { id: 'gold_chain', name: 'Gold Chain', cost: 5000, flexValue: 100, description: 'Basic gold chain' },
+        { id: 'diamond_ring', name: 'Diamond Ring', cost: 25000, flexValue: 500, description: 'Sparkling diamond ring' },
+        { id: 'rolex', name: 'Rolex Watch', cost: 100000, flexValue: 2000, description: 'Luxury timepiece' },
+        { id: 'crown', name: 'Crown', cost: 500000, flexValue: 10000, description: 'Royal crown' }
+      ]
+    },
+    cars: {
+      name: 'Cars',
+      emoji: '🚗',
+      items: [
+        { id: 'beater', name: 'Beater Car', cost: 10000, flexValue: 200, description: 'Basic transportation' },
+        { id: 'sports_car', name: 'Sports Car', cost: 100000, flexValue: 2000, description: 'Fast and flashy' },
+        { id: 'limo', name: 'Limo', cost: 500000, flexValue: 10000, description: 'Luxury transportation' },
+        { id: 'supercar', name: 'Supercar', cost: 2000000, flexValue: 50000, description: 'Ultimate luxury' }
+      ]
+    },
+    properties: {
+      name: 'Properties',
+      emoji: '🏠',
+      items: [
+        { id: 'apartment', name: 'Apartment', cost: 50000, flexValue: 1000, description: 'Basic apartment' },
+        { id: 'mansion', name: 'Mansion', cost: 1000000, flexValue: 20000, description: 'Luxury mansion' },
+        { id: 'penthouse', name: 'Penthouse', cost: 5000000, flexValue: 100000, description: 'Exclusive penthouse' },
+        { id: 'island', name: 'Private Island', cost: 50000000, flexValue: 1000000, description: 'Ultimate luxury' }
+      ]
     }
   };
-  const cancelBuy = () => {
+  
+  const calculateFlexScore = () => {
+    let totalFlex = 0;
+    
+    // Add flex from owned assets
+    Object.values(assets).forEach((assetList: any) => {
+      assetList.forEach((asset: Asset) => {
+        totalFlex += asset.flexValue;
+      });
+    });
+    
+    // Add flex from worn jewelry
+    wornJewelry.forEach((jewelryId: string) => {
+      const jewelry = assetTypes.jewelry.items.find(item => item.id === jewelryId);
+      if (jewelry) {
+        totalFlex += jewelry.flexValue * 2; // Worn jewelry gives double flex
+      }
+    });
+    
+    return totalFlex;
+  };
+  
+  const handleBuyAsset = (asset: Asset) => {
+    if (!state.canAfford(asset.cost)) {
+      alert(`Not enough cash. Need $${asset.cost.toLocaleString()}`);
+      return;
+    }
+    
+    if (!assets[asset.type]) {
+      assets[asset.type] = [];
+    }
+    
+    const newAsset = {
+      ...asset,
+      id: Date.now().toString(),
+      city: currentCity
+    };
+    
+    assets[asset.type].push(newAsset);
+    state.updateCash(-asset.cost);
+    state.assets = assets;
+    
+    events.add(`Purchased ${asset.name} for $${asset.cost.toLocaleString()}`, 'good');
     setShowBuyModal(false);
-    setBuyAsset(null);
-    setShowError(null);
+    refreshUI();
   };
-
-  // Sell handler
-  const handleSell = (instance: any) => {
-    setSellAsset(instance);
-    setShowSellModal(true);
-  };
-  const confirmSell = () => {
-    if (!sellAsset) return;
-    const result = systems.assets.sellAsset(sellAsset.instanceId);
-    if (!result.success && result.error) {
-      setShowError(result.error);
-    } else {
-      setShowSellModal(false);
-      setSellAsset(null);
-      setShowError(null);
-      refreshUI();
+  
+  const handleSellAsset = (asset: Asset) => {
+    const sellValue = Math.floor(asset.cost * 0.7); // 70% of original cost
+    state.updateCash(sellValue);
+    
+    // Remove from assets
+    const assetList = assets[asset.type];
+    const assetIndex = assetList.findIndex((a: Asset) => a.id === asset.id);
+    if (assetIndex !== -1) {
+      assetList.splice(assetIndex, 1);
     }
-  };
-  const cancelSell = () => {
+    
+    events.add(`Sold ${asset.name} for $${sellValue.toLocaleString()}`, 'good');
     setShowSellModal(false);
-    setSellAsset(null);
-    setShowError(null);
+    refreshUI();
   };
-
-  // Wear/Remove jewelry
-  const handleWearJewelry = (instanceId: string) => {
-    const result = systems.assets.wearJewelry(instanceId);
-    if (!result.success && result.error) {
-      setShowError(result.error);
-    } else {
+  
+  const handleWearJewelry = (jewelryId: string) => {
+    if (!wornJewelry.includes(jewelryId)) {
+      state.wornJewelry = [...wornJewelry, jewelryId];
+      events.add(`Wore ${assetTypes.jewelry.items.find(item => item.id === jewelryId)?.name}`, 'good');
       refreshUI();
     }
   };
-  const handleRemoveJewelry = (instanceId: string) => {
-    const result = systems.assets.removeJewelry(instanceId);
-    if (!result.success && result.error) {
-      setShowError(result.error);
-    } else {
-      refreshUI();
-    }
+  
+  const handleRemoveJewelry = (jewelryId: string) => {
+    const newWornJewelry = wornJewelry.filter(id => id !== jewelryId);
+    state.wornJewelry = newWornJewelry;
+    events.add(`Removed ${assetTypes.jewelry.items.find(item => item.id === jewelryId)?.name}`, 'neutral');
+    refreshUI();
   };
-
+  
+  const flexScore = calculateFlexScore();
+  
   return (
     <div className="assets-screen">
       <div className="screen-header">
         <button className="back-button" onClick={() => onNavigate('home')}>
           ← Back
         </button>
-        <h3>💎 Assets</h3>
-        <div style={{ fontSize: '12px', color: '#aaa' }}>Jewelry, Cars, Properties</div>
+        <h3>💎 Assets & Flex</h3>
+        <div style={{ fontSize: '12px', color: '#aaa' }}>Show Off Your Wealth</div>
       </div>
-
-      {/* Summary */}
+      
+      {/* Flex Score */}
       <div style={{
         background: '#333',
+        border: '1px solid #666',
         borderRadius: '10px',
         padding: '15px',
         marginBottom: '20px',
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr 1fr',
-        gap: '10px',
         textAlign: 'center'
       }}>
-        <div>
-          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>Flex Score</div>
-          <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>{flexScore}</div>
+        <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+          💎 Flex Score
         </div>
-        <div>
-          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>Total Value</div>
-          <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>${totalValue.toLocaleString()}</div>
+        <div style={{ fontSize: '24px', color: '#ffff00', fontWeight: 'bold', marginBottom: '10px' }}>
+          {flexScore.toLocaleString()}
         </div>
-        <div>
-          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>Jewelry / Cars / Properties</div>
-          <div style={{ fontSize: '18px', color: '#ffff00', fontWeight: 'bold' }}>{jewelryCount} / {carCount} / {propertyCount}</div>
+        <div style={{ fontSize: '12px', color: '#aaa' }}>
+          Higher flex score increases respect and unlocks exclusive content
         </div>
       </div>
-
-      {/* Available Assets */}
-      <div style={{ marginBottom: '20px' }}>
-        <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px' }}>Available Assets</div>
-        <div style={{ fontWeight: 'bold', color: '#66ff66', marginBottom: '5px' }}>Jewelry</div>
-        {jewelryAssets.map((asset: any) => (
-          <div key={asset.id} style={{
-            background: '#222',
-            border: '1px solid #444',
-            borderRadius: '8px',
-            padding: '10px',
-            marginBottom: '8px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <div>
-              <div style={{ fontWeight: 'bold', color: '#ffff00' }}>{asset.name}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>{asset.description}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>Flex: +{asset.flexScore} | Cost: ${asset.cost.toLocaleString()}</div>
-            </div>
-            <button
-              className="action-btn"
-              style={{ background: cash >= asset.cost ? '#00ff00' : '#666', color: '#000' }}
-              disabled={cash < asset.cost}
-              onClick={() => handleBuy(asset)}
-            >
-              Buy
-            </button>
+      
+      {/* Asset Categories */}
+      {Object.entries(assetTypes).map(([type, category]) => (
+        <div key={type} className="market-item">
+          <div className="market-header">
+            <div className="drug-name">{category.emoji} {category.name}</div>
+            <div className="drug-price">{assets[type]?.length || 0} owned</div>
           </div>
-        ))}
-        {canBuyCars && <div style={{ fontWeight: 'bold', color: '#66ff66', margin: '10px 0 5px' }}>Cars</div>}
-        {canBuyCars && carAssets.map((asset: any) => (
-          <div key={asset.id} style={{
-            background: '#222',
-            border: '1px solid #444',
-            borderRadius: '8px',
-            padding: '10px',
-            marginBottom: '8px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <div>
-              <div style={{ fontWeight: 'bold', color: '#ffff00' }}>{asset.name}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>{asset.description}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>Flex: +{asset.flexScore} | Cost: ${asset.cost.toLocaleString()}</div>
-            </div>
-            <button
-              className="action-btn"
-              style={{ background: cash >= asset.cost ? '#00ff00' : '#666', color: '#000' }}
-              disabled={cash < asset.cost}
-              onClick={() => handleBuy(asset)}
-            >
-              Buy
-            </button>
-          </div>
-        ))}
-        {canBuyProperties && <div style={{ fontWeight: 'bold', color: '#66ff66', margin: '10px 0 5px' }}>Properties</div>}
-        {canBuyProperties && propertyAssets.map((asset: any) => (
-          <div key={asset.id} style={{
-            background: '#222',
-            border: '1px solid #444',
-            borderRadius: '8px',
-            padding: '10px',
-            marginBottom: '8px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <div>
-              <div style={{ fontWeight: 'bold', color: '#ffff00' }}>{asset.name}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>{asset.description}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>Flex: +{asset.flexScore} | Cost: ${asset.cost.toLocaleString()}</div>
-            </div>
-            <button
-              className="action-btn"
-              style={{ background: cash >= asset.cost ? '#00ff00' : '#666', color: '#000' }}
-              disabled={cash < asset.cost}
-              onClick={() => handleBuy(asset)}
-            >
-              Buy
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Owned Assets */}
-      <div style={{ marginBottom: '20px' }}>
-        <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '10px' }}>Owned Assets</div>
-        {ownedAssets.length === 0 && <div style={{ color: '#666' }}>You don't own any assets yet.</div>}
-        {ownedAssets.map((instance: any) => (
-          <div key={instance.instanceId} style={{
-            background: '#222',
-            border: '1px solid #444',
-            borderRadius: '8px',
-            padding: '10px',
-            marginBottom: '8px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <div>
-              <div style={{ fontWeight: 'bold', color: '#ffff00' }}>{instance.name}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>{instance.description}</div>
-              <div style={{ fontSize: '12px', color: '#aaa' }}>Flex: +{instance.flexScore} | Resale: ${instance.resaleValue?.toLocaleString() || Math.floor(instance.cost * 0.9).toLocaleString()}</div>
-              {instance.type === 'jewelry' && (
-                <div style={{ fontSize: '12px', color: '#aaa' }}>
-                  {wearingJewelry.includes(instance.instanceId)
-                    ? <span style={{ color: '#66ff66' }}>Wearing</span>
-                    : <span style={{ color: '#aaa' }}>Not Wearing</span>}
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {category.items.map((item) => {
+              const owned = assets[type]?.filter((asset: Asset) => asset.name === item.name).length || 0;
+              const isWorn = type === 'jewelry' && wornJewelry.includes(item.id);
+              
+              return (
+                <div key={item.id} style={{
+                  background: '#1a1a1a',
+                  border: isWorn ? '2px solid #66ff66' : '1px solid #444',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  position: 'relative'
+                }}>
+                  {isWorn && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '5px',
+                      right: '5px',
+                      background: '#66ff66',
+                      color: '#000',
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      borderRadius: '10px',
+                      fontWeight: 'bold'
+                    }}>
+                      WORN
+                    </div>
+                  )}
+                  
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#ffff00', marginBottom: '5px' }}>
+                    {item.name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+                    {item.description}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#66ff66', marginBottom: '5px' }}>
+                    ${item.cost.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#ffff00', marginBottom: '10px' }}>
+                    +{item.flexValue} flex
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <button
+                      className="action-btn"
+                      onClick={() => {
+                        setSelectedAsset(item);
+                        setShowBuyModal(true);
+                      }}
+                      disabled={item.cost > cash}
+                      style={{
+                        fontSize: '10px',
+                        padding: '5px 8px',
+                        background: item.cost > cash ? '#444' : '#333',
+                        color: item.cost > cash ? '#666' : '#fff'
+                      }}
+                    >
+                      Buy
+                    </button>
+                    
+                    {owned > 0 && (
+                      <button
+                        className="action-btn"
+                        onClick={() => {
+                          const ownedAsset = assets[type].find((asset: Asset) => asset.name === item.name);
+                          if (ownedAsset) {
+                            setSelectedAsset(ownedAsset);
+                            setShowSellModal(true);
+                          }
+                        }}
+                        style={{
+                          fontSize: '10px',
+                          padding: '5px 8px',
+                          background: '#ff6666',
+                          color: '#000'
+                        }}
+                      >
+                        Sell
+                      </button>
+                    )}
+                    
+                    {type === 'jewelry' && owned > 0 && !isWorn && (
+                      <button
+                        className="action-btn"
+                        onClick={() => handleWearJewelry(item.id)}
+                        style={{
+                          fontSize: '10px',
+                          padding: '5px 8px',
+                          background: '#66ff66',
+                          color: '#000'
+                        }}
+                      >
+                        Wear
+                      </button>
+                    )}
+                    
+                    {type === 'jewelry' && isWorn && (
+                      <button
+                        className="action-btn"
+                        onClick={() => handleRemoveJewelry(item.id)}
+                        style={{
+                          fontSize: '10px',
+                          padding: '5px 8px',
+                          background: '#ff6666',
+                          color: '#000'
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  
+                  {owned > 0 && (
+                    <div style={{ fontSize: '10px', color: '#66ff66', marginTop: '5px' }}>
+                      Owned: {owned}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {instance.type === 'jewelry' && (
-                wearingJewelry.includes(instance.instanceId)
-                  ? <button className="action-btn" style={{ background: '#ff6666' }} onClick={() => handleRemoveJewelry(instance.instanceId)}>Remove</button>
-                  : <button className="action-btn" onClick={() => handleWearJewelry(instance.instanceId)}>Wear</button>
-              )}
-              <button className="action-btn" style={{ background: '#ff6600' }} onClick={() => handleSell(instance)}>Sell</button>
-            </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
-
+        </div>
+      ))}
+      
+      {/* Worn Jewelry Display */}
+      {wornJewelry.length > 0 && (
+        <div style={{
+          background: '#222',
+          border: '1px solid #444',
+          borderRadius: '10px',
+          padding: '15px',
+          marginBottom: '20px'
+        }}>
+          <div style={{ fontSize: '14px', color: '#ffff00', marginBottom: '15px', textAlign: 'center' }}>
+            💎 Currently Wearing
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {wornJewelry.map((jewelryId) => {
+              const jewelry = assetTypes.jewelry.items.find(item => item.id === jewelryId);
+              if (!jewelry) return null;
+              
+              return (
+                <div key={jewelryId} style={{
+                  background: '#1a1a1a',
+                  padding: '10px',
+                  borderRadius: '5px',
+                  border: '1px solid #66ff66'
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#66ff66' }}>
+                    {jewelry.name}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#aaa' }}>
+                    +{jewelry.flexValue * 2} flex (worn)
+                  </div>
+                  <button
+                    onClick={() => handleRemoveJewelry(jewelryId)}
+                    className="action-btn"
+                    style={{
+                      fontSize: '10px',
+                      padding: '3px 6px',
+                      background: '#ff6666',
+                      color: '#000',
+                      marginTop: '5px'
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      
       {/* Buy Modal */}
-      {showBuyModal && buyAsset && (
-        <div className="modal-overlay" onClick={cancelBuy}>
+      {showBuyModal && selectedAsset && (
+        <div className="modal-overlay" onClick={() => setShowBuyModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Confirm Purchase</span>
-              <button className="modal-close" onClick={cancelBuy}>×</button>
+              <span className="modal-title">💎 Purchase Asset</span>
+              <button className="modal-close" onClick={() => setShowBuyModal(false)}>×</button>
             </div>
-            <div className="modal-body" style={{ textAlign: 'center', padding: '20px' }}>
-              <div style={{ fontWeight: 'bold', color: '#ffff00', fontSize: '18px', marginBottom: '10px' }}>{buyAsset.name}</div>
-              <div style={{ color: '#aaa', marginBottom: '10px' }}>{buyAsset.description}</div>
-              <div style={{ color: '#aaa', marginBottom: '10px' }}>Flex: +{buyAsset.flexScore} | Cost: ${buyAsset.cost.toLocaleString()}</div>
-              {showError && <div style={{ color: '#ff6666', marginBottom: '10px' }}>{showError}</div>}
-              <button className="action-btn" onClick={confirmBuy}>
-                Confirm
-              </button>
-              <button className="action-btn" style={{ background: '#ff6666', marginLeft: 10 }} onClick={cancelBuy}>
-                Cancel
-              </button>
+            <div className="modal-body">
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
+                  {selectedAsset.name}
+                </div>
+                <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '15px' }}>
+                  {selectedAsset.description}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px', marginBottom: '20px' }}>
+                  <div>Cost: <span style={{ color: '#ffff00' }}>${selectedAsset.cost.toLocaleString()}</span></div>
+                  <div>Flex Value: <span style={{ color: '#66ff66' }}>+{selectedAsset.flexValue}</span></div>
+                  <div>Type: <span style={{ color: '#ffff00' }}>{selectedAsset.type}</span></div>
+                  <div>Location: <span style={{ color: '#ffff00' }}>{currentCity}</span></div>
+                </div>
+                
+                <button
+                  onClick={() => handleBuyAsset(selectedAsset)}
+                  className="action-btn"
+                  style={{ width: '100%' }}
+                  disabled={selectedAsset.cost > cash}
+                >
+                  Purchase for ${selectedAsset.cost.toLocaleString()}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
-
+      
       {/* Sell Modal */}
-      {showSellModal && sellAsset && (
-        <div className="modal-overlay" onClick={cancelSell}>
+      {showSellModal && selectedAsset && (
+        <div className="modal-overlay" onClick={() => setShowSellModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Confirm Sale</span>
-              <button className="modal-close" onClick={cancelSell}>×</button>
+              <span className="modal-title">💰 Sell Asset</span>
+              <button className="modal-close" onClick={() => setShowSellModal(false)}>×</button>
             </div>
-            <div className="modal-body" style={{ textAlign: 'center', padding: '20px' }}>
-              <div style={{ fontWeight: 'bold', color: '#ffff00', fontSize: '18px', marginBottom: '10px' }}>{sellAsset.name}</div>
-              <div style={{ color: '#aaa', marginBottom: '10px' }}>{sellAsset.description}</div>
-              <div style={{ color: '#aaa', marginBottom: '10px' }}>Resale: ${sellAsset.resaleValue?.toLocaleString() || Math.floor(sellAsset.cost * 0.9).toLocaleString()}</div>
-              {showError && <div style={{ color: '#ff6666', marginBottom: '10px' }}>{showError}</div>}
-              <button className="action-btn" onClick={confirmSell}>
-                Confirm
-              </button>
-              <button className="action-btn" style={{ background: '#ff6666', marginLeft: 10 }} onClick={cancelSell}>
-                Cancel
-              </button>
+            <div className="modal-body">
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
+                  {selectedAsset.name}
+                </div>
+                <div style={{ fontSize: '14px', color: '#aaa', marginBottom: '15px' }}>
+                  Sell this asset for 70% of its original value
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px', marginBottom: '20px' }}>
+                  <div>Original Cost: <span style={{ color: '#ffff00' }}>${selectedAsset.cost.toLocaleString()}</span></div>
+                  <div>Sell Value: <span style={{ color: '#66ff66' }}>${Math.floor(selectedAsset.cost * 0.7).toLocaleString()}</span></div>
+                  <div>Flex Lost: <span style={{ color: '#ff6666' }}>-{selectedAsset.flexValue}</span></div>
+                  <div>Location: <span style={{ color: '#ffff00' }}>{selectedAsset.city}</span></div>
+                </div>
+                
+                <button
+                  onClick={() => handleSellAsset(selectedAsset)}
+                  className="action-btn"
+                  style={{ width: '100%', background: '#ff6666', color: '#000' }}
+                >
+                  Sell for ${Math.floor(selectedAsset.cost * 0.7).toLocaleString()}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      <button className="action-btn" onClick={() => onNavigate('home')} style={{ width: '100%', marginTop: '10px' }}>
-        Back to Home
-      </button>
     </div>
   );
 } 
