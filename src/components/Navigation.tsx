@@ -9,6 +9,7 @@ export default function Navigation({ currentScreen, onNavigate }: NavigationProp
   const navItems = [
     { id: 'home', icon: '🏠', label: 'Home' },
     { id: 'market', icon: '💊', label: 'Market' },
+    { id: 'trading', icon: '💼', label: 'Trading' },
     { id: 'travel', icon: '✈️', label: 'Travel' }
   ];
 

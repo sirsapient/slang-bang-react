@@ -57,6 +57,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     { id: 'gang', icon: '👥', name: 'Manage Gang', onClick: () => onNavigate('gang') },
     { id: 'raid', icon: '⚔️', name: 'Raid Bases', onClick: () => onNavigate('raid') },
     { id: 'market', icon: '💊', name: 'Market', onClick: () => onNavigate('market') },
+    { id: 'trading', icon: '💼', name: 'Trading', onClick: () => onNavigate('trading') },
     { id: 'travel', icon: '✈️', name: 'Travel', onClick: () => onNavigate('travel') },
     { id: 'inventory', icon: '🎒', name: 'Inventory', onClick: () => onNavigate('inventory') },
     { id: 'assets', icon: '💎', name: 'Assets', onClick: () => onNavigate('assets') },
