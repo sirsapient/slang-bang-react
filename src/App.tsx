@@ -13,6 +13,7 @@ import TradingScreen from './screens/TradingScreen';
 import RaidScreen from './screens/RaidScreen';
 import MailScreen from './screens/MailScreen';
 import './App.css';
+import { Modal } from './components/Modal';
 
 function GameContent() {
   const { state, systems, updateGameState, refreshUI } = useGame();
@@ -106,6 +107,28 @@ function GameContent() {
 
   return (
     <div className="phone-container">
+      {/* Fixed debug box for overlay test */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '300px',
+        height: '100px',
+        background: 'yellow',
+        color: 'black',
+        zIndex: 1000000,
+        fontSize: '20px',
+        fontWeight: 'bold',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '5px solid red',
+        pointerEvents: 'none',
+      }}>
+        DEBUG OVERLAY VISIBLE?
+      </div>
+      {/* Debug overlay to confirm modal is covering the app */}
+      <div id="modal-debug-overlay"></div>
       <div className="status-bar">
         <div>🔐 Secure</div>
         <div id="phoneTime">{new Date().toLocaleTimeString('en-US', { 

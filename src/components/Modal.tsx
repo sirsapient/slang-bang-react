@@ -1,5 +1,8 @@
 import React, { type ReactNode } from 'react';
+import ReactDOM from 'react-dom';
 import './Modal.css';
+
+console.log('Modal component loaded');
 
 interface ModalProps {
   isOpen: boolean;
@@ -18,9 +21,11 @@ export function Modal({
   showCloseButton = true,
   maxWidth = '500px' 
 }: ModalProps) {
+  console.log('Modal rendering with isOpen:', isOpen);
   if (!isOpen) return null;
 
-  return (
+  // Use React Portal to render modal at the document body
+  return ReactDOM.createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div 
         className="modal-content" 
@@ -36,10 +41,15 @@ export function Modal({
           </div>
         )}
         <div className="modal-body">
+          {/* Fallback message for debugging */}
+          <div style={{ background: 'orange', color: 'black', padding: 10, fontWeight: 'bold', marginBottom: 10 }}>
+            MODAL OPEN (isOpen: true) - If you see this, the modal is rendering.
+          </div>
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -62,9 +72,10 @@ export function ConfirmModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel'
 }: ConfirmModalProps) {
+  console.log('ConfirmModal rendering with isOpen:', isOpen);
   if (!isOpen) return null;
 
-  return (
+  return ReactDOM.createPortal(
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -101,6 +112,7 @@ export function ConfirmModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 } 
