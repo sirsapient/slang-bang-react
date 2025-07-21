@@ -18,7 +18,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
   
   const heatLevel = systems.heat.getHeatLevelText();
   const heatColor = heatLevel === 'High' || heatLevel === 'Critical' ? '#ff6666' : '#66ff66';
-  
+
   const handleCityClick = (cityName: string, cost: number) => {
     if (cash >= cost) {
       setSelectedCity(cityName);
@@ -145,7 +145,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
     setShowArrestModal(false);
     completeTravel();
   };
-  
+
   return (
     <div className="travel-screen">
       <div className="screen-header">
@@ -177,7 +177,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
           const hasBase = state.bases?.[cityName] != null;
           
           return (
-            <div
+          <div
               key={cityName}
               className="city-item"
               style={{
@@ -185,7 +185,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
                 cursor: canAfford ? 'pointer' : 'not-allowed'
               }}
               onClick={() => canAfford && handleCityClick(cityName, cost)}
-            >
+          >
               <div className="city-header">
                 <div className="city-name">
                   {cityName}
@@ -201,7 +201,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
                 {state.heatLevel >= 40 && ' • Will reduce heat'}
                 {hasBase && ' • You own a base here'}
               </div>
-            </div>
+          </div>
           );
         })}
       </div>
@@ -223,14 +223,14 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
           }` }} />
           <div style={{ marginTop: '20px' }}>
             <button className="action-btn" onClick={executeTravel}>
-              Confirm
-            </button>
+            Confirm
+          </button>
             <button className="action-btn" style={{ background: '#ff6666', marginLeft: 10 }} onClick={() => {
               setShowConfirm(false);
               setSelectedCity(null);
             }}>
-              Cancel
-            </button>
+            Cancel
+          </button>
           </div>
         </div>
       </Modal>

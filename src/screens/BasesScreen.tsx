@@ -410,7 +410,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                         <div style={{ fontSize: '12px', color: '#aaa' }}>
                           Cost: ${upgradeCost.toLocaleString()} • Income: ${upgradeType.income.toLocaleString()}/hr • Capacity: {upgradeType.capacity}
                         </div>
-                      </button>
+      </button>
                     );
                   })}
                 </div>

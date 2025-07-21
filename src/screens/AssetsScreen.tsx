@@ -417,7 +417,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                   style={{ width: '100%', background: '#ff6666', color: '#000' }}
                 >
                   Sell for ${Math.floor(selectedAsset.cost * 0.7).toLocaleString()}
-                </button>
+      </button>
               </div>
             </div>
           </div>

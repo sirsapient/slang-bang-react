@@ -375,7 +375,7 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
                   disabled={transferData.fromCity === transferData.toCity || transferData.amount <= 0}
                 >
                   Transfer
-                </button>
+      </button>
               </div>
             </div>
           </div>

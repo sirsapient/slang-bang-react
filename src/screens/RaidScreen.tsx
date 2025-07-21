@@ -381,7 +381,7 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
                   style={{ width: '100%' }}
                 >
                   Continue
-                </button>
+      </button>
               </div>
             </div>
           </div>

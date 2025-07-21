@@ -11,7 +11,7 @@ export class RaidSystem {
             }
             this.enemyBases = window.enemyBases;
         } else {
-            this.enemyBases = this.generateEnemyBases();
+        this.enemyBases = this.generateEnemyBases();
         }
     }
     
