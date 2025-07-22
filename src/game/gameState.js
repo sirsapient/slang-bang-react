@@ -52,6 +52,9 @@ export class GameState {
             
             // Notifications
             notifications: [],
+
+            // Per-city raid activity for base attack probability
+            cityRaidActivity: {}, // { [city]: { count: number, lastRaid: number } }
             
             // Achievements
             achievements: {
@@ -116,13 +119,19 @@ export class GameState {
     }
     
     updateInventory(drug, amount) {
+        console.log('[DEBUG] updateInventory called:', drug, amount);
+        if (!this.data.inventory[drug]) {
+            this.data.inventory[drug] = 0;
+        }
         this.data.inventory[drug] = Math.max(0, (this.data.inventory[drug] || 0) + amount);
         this.emit('inventoryChanged', { drug, amount: this.data.inventory[drug] });
         this.emit('stateChange', { key: 'inventory', value: { ...this.data.inventory } });
+        console.log('[DEBUG] inventory after update:', this.data.inventory);
     }
     
     // Cash management
     updateCash(amount) {
+        console.log('[DEBUG] updateCash called:', amount);
         const oldCash = this.data.cash;
         const newCash = Math.max(0, oldCash + amount);
         
@@ -135,6 +144,7 @@ export class GameState {
         this.data.cash = newCash;
         this.emit('cashChanged', this.data.cash);
         this.emit('stateChange', { key: 'cash', value: this.data.cash });
+        console.log('[DEBUG] cash after update:', this.data.cash);
     }
     
     updateGuns(amount) {
@@ -611,6 +621,48 @@ export class GameState {
             progress: this.data.achievements.progress
         };
     }
+
+    // --- Raid Activity Tracking ---
+    /**
+     * Increment raid count for a city and update last raid timestamp.
+     * @param {string} city
+     */
+    incrementCityRaidActivity(city) {
+        if (!this.data.cityRaidActivity[city]) {
+            this.data.cityRaidActivity[city] = { count: 0, lastRaid: 0 };
+        }
+        this.data.cityRaidActivity[city].count++;
+        this.data.cityRaidActivity[city].lastRaid = Date.now();
+    }
+
+    /**
+     * Get raid activity for a city (count and lastRaid timestamp).
+     * @param {string} city
+     * @returns {{count: number, lastRaid: number}}
+     */
+    getCityRaidActivity(city) {
+        return this.data.cityRaidActivity[city] || { count: 0, lastRaid: 0 };
+    }
+
+    /**
+     * Decay raid activity for all cities over time (call this periodically, e.g. daily).
+     * Decreases count if enough time has passed since last raid.
+     * @param {number} cooldownMs - Time in ms after which to decrease count by 1.
+     */
+    decayCityRaidActivity(cooldownMs = 10 * 60 * 1000) { // default: 10 min cooldown per count
+        const now = Date.now();
+        Object.keys(this.data.cityRaidActivity).forEach(city => {
+            const activity = this.data.cityRaidActivity[city];
+            if (activity.count > 0 && now - activity.lastRaid > cooldownMs) {
+                activity.count--;
+                if (activity.count === 0) {
+                    activity.lastRaid = 0;
+                } else {
+                    activity.lastRaid = now; // reset timer for next decay
+                }
+            }
+        });
+    }
 }
 
 /**
@@ -639,3 +691,4 @@ export class GameState {
  */
 // Export singleton instance
 export const gameState = new GameState();
+gameState.trading = new TradingSystem(gameState, { add: () => {} }, gameData);

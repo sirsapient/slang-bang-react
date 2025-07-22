@@ -1,6 +1,6 @@
 // src/screens/RaidScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { useGame, useCurrentCity } from '../contexts/GameContext';
+import { useGame, useCurrentCity } from '../contexts/GameContext.jsx';
 import { Modal } from '../components/Modal';
 import { gameData } from '../game/data/gameData';
 
@@ -9,75 +9,136 @@ interface RaidScreenProps {
 }
 
 export default function RaidScreen({ onNavigate }: RaidScreenProps) {
-  const { state, systems, events, refreshUI } = useGame();
+  const {
+    getAvailableGangMembers,
+    getAvailableGangMembersInCity,
+    getAvailableGunsInCity,
+    getAllRaidTargets,
+    isRaidTargetOnCooldown,
+    executeRaid,
+    calculateRaidSuccess,
+    getDifficultyColor,
+    getDifficultyText,
+  } = useGame();
   const currentCity = useCurrentCity();
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [raidGangSize, setRaidGangSize] = useState(3);
   const [showResults, setShowResults] = useState(false);
   const [raidResult, setRaidResult] = useState<any>(null);
-  
-  const availableGang = state.getAvailableGangMembers();
-  const availableGangInCity = state.getAvailableGangMembersInCity(currentCity);
-  const availableGunsInCity = state.getAvailableGunsInCity(currentCity);
-  const targets = systems.raid.getAvailableTargets(currentCity);
-  
+  const [showCooldownModal, setShowCooldownModal] = useState(false);
+  const [cooldownMessage, setCooldownMessage] = useState('');
+
+  const availableGang = getAvailableGangMembers();
+  const availableGangInCity = getAvailableGangMembersInCity(currentCity);
+  const availableGunsInCity = getAvailableGunsInCity(currentCity);
+  const targets = getAllRaidTargets(currentCity);
+
   useEffect(() => {
     // Reset gang size when switching targets
     if (selectedTarget) {
       setRaidGangSize(Math.min(3, availableGangInCity));
     }
   }, [selectedTarget, availableGangInCity]);
-  
+
   const handleTargetSelect = (targetId: string) => {
     setSelectedTarget(targetId);
   };
-  
-  const executeRaid = () => {
+
+  const handleExecuteRaid = () => {
     if (!selectedTarget) return;
-    
-    const result = systems.raid.executeRaid(selectedTarget, raidGangSize);
-    
+    const result = executeRaid(selectedTarget, raidGangSize, currentCity);
     if (result && typeof result === 'object') {
       if (result.onCooldown) {
-        alert(result.error);
+        setCooldownMessage(result.error);
+        setShowCooldownModal(true);
       } else if (result.success !== undefined) {
         setRaidResult(result);
         setShowResults(true);
-        refreshUI();
       } else if (result.error) {
-        alert(result.error);
+        // handle other errors if needed
       }
     }
   };
-  
+
   const getSelectedTarget = () => {
     if (!selectedTarget || !targets) return null;
     return targets.find((t: any) => t.id === selectedTarget);
   };
-  
+
   const calculateSuccessChance = () => {
     const target = getSelectedTarget();
     if (!target) return 0;
-    
-    return systems.raid.calculateRaidSuccess(
+    return calculateRaidSuccess(
       raidGangSize,
       availableGunsInCity,
       target.difficulty,
       target.gangSize
     );
   };
-  
-  if (availableGangInCity < 3) {
-    return (
-      <div className="raid-screen">
-        <div className="screen-header">
-          <button className="back-button" onClick={() => onNavigate('home')}>
-            ← Back
-          </button>
-          <h3>⚔️ Base Raids</h3>
-          <div style={{ fontSize: '12px', color: '#aaa' }}>Attack Enemy Bases</div>
+
+  // Always show inventory summary at the top
+  const renderInventorySummary = () => (
+    <div style={{
+      background: '#333',
+      border: '1px solid #666',
+      borderRadius: '10px',
+      padding: '15px',
+      marginBottom: '20px'
+    }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr 1fr',
+        gap: '15px',
+        textAlign: 'center'
+      }}>
+        <div>
+          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+            👥 Total Gang
+          </div>
+          <div style={{ fontSize: '18px', color: '#ffff00', fontWeight: 'bold' }}>
+            {availableGang}
+          </div>
         </div>
-        
+        <div>
+          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+            🗺️ In {currentCity}
+          </div>
+          <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
+            {availableGangInCity}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+            🔫 Guns in {currentCity}
+          </div>
+          <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
+            {availableGunsInCity}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+            🎯 Targets
+          </div>
+          <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
+            {targets.length}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Main render
+  return (
+    <div className="raid-screen">
+      <div className="screen-header">
+        <button className="back-button" onClick={() => onNavigate('home')}>
+          ← Back
+        </button>
+        <h3>⚔️ Base Raids</h3>
+        <div style={{ fontSize: '12px', color: '#aaa' }}>Attack Enemy Bases</div>
+      </div>
+      {renderInventorySummary()}
+      {availableGangInCity < 3 ? (
         <div style={{
           background: '#222',
           border: '1px solid #444',
@@ -97,89 +158,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             💡 Tip: Recruit more gang members and keep them unassigned for raids
           </div>
         </div>
-      </div>
-    );
-  }
-  
-  return (
-    <div className="raid-screen">
-      <div className="screen-header">
-        <button className="back-button" onClick={() => onNavigate('home')}>
-          ← Back
-        </button>
-        <h3>⚔️ Base Raids</h3>
-        <div style={{ fontSize: '12px', color: '#aaa' }}>Attack Enemy Bases</div>
-      </div>
-      
-      {/* Raid Overview */}
-      <div style={{
-        background: '#333',
-        border: '1px solid #666',
-        borderRadius: '10px',
-        padding: '15px',
-        marginBottom: '20px'
-      }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr 1fr',
-          gap: '15px',
-          textAlign: 'center'
-        }}>
-          <div>
-            <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
-              👥 Total Gang
-            </div>
-            <div style={{ fontSize: '18px', color: '#ffff00', fontWeight: 'bold' }}>
-              {availableGang}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
-              🗺️ In {currentCity}
-            </div>
-            <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
-              {availableGangInCity}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
-              🔫 Guns in {currentCity}
-            </div>
-            <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
-              {availableGunsInCity}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
-              🎯 Targets
-            </div>
-            <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
-              {targets.length}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {targets.length === 0 ? (
-        <div style={{
-          background: '#222',
-          border: '1px solid #444',
-          borderRadius: '10px',
-          padding: '30px',
-          textAlign: 'center',
-          marginTop: '20px'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '15px' }}>🎯</div>
-          <div style={{ fontSize: '16px', color: '#aaa', marginBottom: '10px' }}>
-            No Available Targets
-          </div>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>
-            All enemy bases in this city are on cooldown
-          </div>
-          <div style={{ fontSize: '11px', color: '#888' }}>
-            💡 Tip: Try traveling to another city or wait for cooldowns to reset
-          </div>
-        </div>
       ) : (
         <>
           {/* Target Selection */}
@@ -189,12 +167,10 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             </div>
             {targets.map((target: any) => renderTargetCard(target))}
           </div>
-          
           {/* Raid Planning */}
           {selectedTarget && renderRaidPlanning()}
         </>
       )}
-      
       {/* Raid Results Modal */}
       <Modal
         isOpen={showResults}
@@ -208,20 +184,31 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
       >
         {renderRaidResults()}
       </Modal>
+      {/* Raid Cooldown Modal */}
+      <Modal
+        isOpen={showCooldownModal}
+        onClose={() => setShowCooldownModal(false)}
+        title="⏳ Raid Cooldown"
+      >
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <div style={{ fontSize: '18px', marginBottom: '10px' }}>{cooldownMessage}</div>
+          <button className="action-btn" onClick={() => setShowCooldownModal(false)}>
+            OK
+          </button>
+        </div>
+      </Modal>
     </div>
   );
-  
+
   function renderTargetCard(target: any) {
-    const difficultyColor = systems.raid.getDifficultyColor(target.difficulty);
-    const difficultyText = systems.raid.getDifficultyText(target.difficulty);
+    const difficultyColor = getDifficultyColor(target.difficulty);
+    const difficultyText = getDifficultyText(target.difficulty);
     const totalDrugs = Object.values(target.drugs).reduce((sum: number, count: any) => sum + count, 0);
-    
     const currentTime = Date.now();
     const cooldownPeriod = 5 * 60 * 1000; // 5 minutes
     const timeSinceLastRaid = currentTime - target.lastRaid;
-    const isOnCooldown = timeSinceLastRaid < cooldownPeriod;
+    const isOnCooldown = isRaidTargetOnCooldown(target);
     const remainingMinutes = isOnCooldown ? Math.ceil((cooldownPeriod - timeSinceLastRaid) / 1000 / 60) : 0;
-    
     return (
       <div
         key={target.id}
@@ -263,7 +250,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             </div>
           </div>
         </div>
-        
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr 1fr',
@@ -275,7 +261,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
           <div>📦 {totalDrugs} drugs</div>
           <div>👥 {target.gangSize} guards</div>
         </div>
-        
         {isOnCooldown && (
           <div style={{
             background: '#333',
@@ -292,19 +277,17 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
       </div>
     );
   }
-  
+
   function renderRaidPlanning() {
     const target = getSelectedTarget();
     if (!target) return null;
-    
     const successChance = calculateSuccessChance();
     const successColor = successChance > 0.7 ? '#66ff66' : 
                        successChance > 0.5 ? '#ffff00' : '#ff6666';
-    
     const hasEnoughGuns = availableGunsInCity >= raidGangSize;
     const hasEnoughGang = availableGangInCity >= raidGangSize;
-    const canExecuteRaid = hasEnoughGuns && hasEnoughGang;
-    
+    const isOnCooldown = isRaidTargetOnCooldown(target);
+    const canExecuteRaid = hasEnoughGuns && hasEnoughGang && !isOnCooldown;
     return (
       <div style={{
         background: '#222',
@@ -320,7 +303,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
         }}>
           ⚔️ Raid Planning - {target.name}
         </div>
-        
         {/* Success Chance */}
         <div style={{
           background: '#333',
@@ -336,7 +318,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             {Math.round(successChance * 100)}%
           </div>
         </div>
-        
         {/* Gang Size Slider */}
         <div style={{ marginBottom: '15px' }}>
           <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>
@@ -361,7 +342,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             <span>{Math.min(availableGangInCity, 25)}</span>
           </div>
         </div>
-        
         {/* Raid Details */}
         <div style={{
           background: '#333',
@@ -386,13 +366,12 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
               </span>
             </div>
             <div>
-              Difficulty: <span style={{ color: systems.raid.getDifficultyColor(target.difficulty) }}>
-                {systems.raid.getDifficultyText(target.difficulty)}
+              Difficulty: <span style={{ color: getDifficultyColor(target.difficulty) }}>
+                {getDifficultyText(target.difficulty)}
               </span>
             </div>
           </div>
         </div>
-        
         {/* Validation Warnings */}
         {!hasEnoughGuns && (
           <div style={{
@@ -408,10 +387,9 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             </div>
           </div>
         )}
-        
         {/* Execute Raid */}
         <button
-          onClick={executeRaid}
+          onClick={handleExecuteRaid}
           className="action-btn"
           style={{
             width: '100%',
@@ -426,15 +404,13 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
       </div>
     );
   }
-  
+
   function renderRaidResults() {
     if (!raidResult) return null;
-    
     if (raidResult.success) {
       const cash = raidResult.loot?.cash || 0;
       const drugs = raidResult.loot?.drugs || {};
       const heatIncrease = raidResult.heatIncrease || 0;
-      
       return (
         <div style={{ padding: '20px' }}>
           <div style={{
@@ -458,7 +434,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
               Looted ${cash.toLocaleString()} and drugs
             </div>
           </div>
-          
           <div style={{
             background: '#222',
             padding: '15px',
@@ -475,7 +450,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
               ))}
             </div>
           </div>
-          
           <div style={{
             background: '#220000',
             border: '1px solid #660000',
@@ -490,7 +464,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
       );
     } else {
       const heatIncrease = raidResult.heatIncrease || 0;
-      
       return (
         <div style={{ padding: '20px' }}>
           <div style={{
@@ -514,7 +487,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
               Your gang was defeated
             </div>
           </div>
-          
           <div style={{
             background: '#220000',
             border: '1px solid #660000',

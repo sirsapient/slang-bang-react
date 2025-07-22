@@ -1,32 +1,59 @@
 import React, { useState } from 'react';
-import { useGame, useCash, useCurrentCity, useNetWorth } from '../contexts/GameContext';
+import { useGame, useCash, useCurrentCity } from '../contexts/GameContext.jsx';
 import { Modal } from '../components/Modal';
 import { PlayerCard } from '../components/PlayerCard';
+// @ts-ignore
 import { gameData } from '../game/data/gameData';
 
 interface HomeScreenProps {
   onNavigate: (screen: string) => void;
 }
 
+interface PendingPurchase {
+  qty: number;
+  cost: number;
+}
+
 export default function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { state, systems, events } = useGame();
-  const cash = useCash();
-  const currentCity = useCurrentCity();
-  const netWorth = useNetWorth();
+  const { state, resetGame, updateCash, updateInventory, addNotification, dispatch } = useGame();
+  // Remove systems and events, use only state and gameState
+  const cash = state.cash ?? 0;
+  const currentCity = state.currentCity || 'Unknown';
+  // Calculate net worth: cash + inventory value (using current city prices if available)
+  const getNetWorth = () => {
+    let total = state.cash || 0;
+    const prices = (gameData.cities[currentCity] && gameData.cities[currentCity].prices) || {};
+    for (const drug in state.inventory) {
+      const qty = state.inventory[drug] || 0;
+      const price = prices[drug] || 0;
+      total += qty * price;
+    }
+    return total;
+  };
+  const netWorth = getNetWorth();
   const [showBriberyModal, setShowBriberyModal] = useState(false);
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [showQuickBuyModal, setShowQuickBuyModal] = useState(false);
   const [confirmBribery, setConfirmBribery] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [gunQty, setGunQty] = useState<number | "">(1);
+  const [gangQty, setGangQty] = useState<number | "">(1);
+  // Confirmation modal state
+  const [showGunConfirm, setShowGunConfirm] = useState(false);
+  const [showGangConfirm, setShowGangConfirm] = useState(false);
+  const [pendingGunPurchase, setPendingGunPurchase] = useState<PendingPurchase>({ qty: 0, cost: 0 });
+  const [pendingGangRecruit, setPendingGangRecruit] = useState<PendingPurchase>({ qty: 0, cost: 0 });
 
-  const cityData = gameData.cities[currentCity];
-  const heatLevel = systems.heat.calculateHeatLevel();
-  const heatWarning = systems.heat.getHeatWarning();
+  const cityData = gameData.cities[currentCity] || {};
+  const heatLevel = state.heatLevel ?? 0;
+  const heatWarning = heatLevel > 80 ? 'Heat is very high!' : undefined;
 
   // Calculate current player rank
   const getCurrentRank = () => {
     const basesOwned = Object.keys(state.bases || {}).length;
     const gangSize = state.gangSize || 0;
-    const assetCount = systems.assets?.getOwnedAssetCount() || 0;
+    const assetCount = 0; // No systems.assets in minimal context
     let currentRank = 1;
     for (let rankId = 7; rankId >= 1; rankId--) {
       const rank = gameData.playerRanks[rankId];
@@ -41,15 +68,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     return currentRank;
   };
 
-  const handleBribery = () => {
-    const bribery = systems.heat.calculateBriberyCost();
-    setConfirmBribery(false);
-    const result = systems.heat.processBribery(bribery.cost, bribery.reduction);
-    if (!result.success && result.error) {
-      alert(result.error);
-    }
-    setShowBriberyModal(false);
-  };
+  // Remove handleBribery and systems.heat references
 
   const apps = [
     { id: 'quickBuy', icon: '🛒', name: 'Quick Buy', onClick: () => setShowQuickBuyModal(true) },
@@ -63,6 +82,12 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     { id: 'assets', icon: '💎', name: 'Assets', onClick: () => onNavigate('assets') },
     { id: 'ranking', icon: '🏆', name: 'Ranking', onClick: () => setShowRankingModal(true) },
     { id: 'mail', icon: '📧', name: 'Mail', onClick: () => onNavigate('mail') }
+  ];
+
+  // Add Settings to the apps array
+  const appsWithSettings = [
+    ...apps,
+    { id: 'settings', icon: '⚙️', name: 'Settings', onClick: () => setShowSettingsModal(true) },
   ];
 
   return (
@@ -108,15 +133,16 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       )}
       {/* App Grid */}
       <div className="app-grid">
-        {apps.map(app => (
-          <div 
+        {appsWithSettings.map(app => (
+          <button
             key={app.id}
             className="app-icon"
             onClick={app.onClick}
+            style={{ minWidth: 80 }}
           >
-            <div className="app-emoji">{app.icon}</div>
-            <div className="app-name">{app.name}</div>
-          </div>
+            <div style={{ fontSize: 32 }}>{app.icon}</div>
+            <div style={{ fontSize: 13, marginTop: 4 }}>{app.name}</div>
+          </button>
         ))}
       </div>
       {/* Bribery Modal */}
@@ -129,14 +155,14 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           <div style={{ textAlign: 'center', padding: '20px' }}>
             <p>
               Pay bribes to reduce your heat level?<br /><br />
-              Current Warrant: ${state.warrant.toLocaleString()}<br />
-              Bribery Cost: ${systems.heat.calculateBriberyCost().cost.toLocaleString()}<br />
-              Warrant Reduction: -${systems.heat.calculateBriberyCost().reduction.toLocaleString()}
+              Current Warrant: ${(state.warrant ?? 0).toLocaleString()}<br />
+              Bribery Cost: N/A<br />
+              Warrant Reduction: N/A
             </p>
             <button 
               className="action-btn" 
               style={{ margin: '0 10px' }}
-              onClick={handleBribery}
+              onClick={() => setShowBriberyModal(false)}
             >
               Confirm
             </button>
@@ -159,12 +185,133 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
         {renderRankingContent()}
       </Modal>
       {/* Quick Buy Modal */}
+      {showQuickBuyModal && (
+        <Modal
+          isOpen={showQuickBuyModal}
+          onClose={() => setShowQuickBuyModal(false)}
+          title="🛒 Quick Buy"
+        >
+          {renderQuickBuyContent(gunQty, setGunQty, gangQty, setGangQty)}
+          <button
+            className="action-btn"
+            style={{ marginTop: 16, background: '#ff6666' }}
+            onClick={() => setShowQuickBuyModal(false)}
+          >
+            Close
+          </button>
+        </Modal>
+      )}
+      {/* Gun Purchase Confirmation Modal */}
       <Modal
-        isOpen={showQuickBuyModal}
-        onClose={() => setShowQuickBuyModal(false)}
-        title="🛒 Quick Buy Assets"
+        isOpen={showGunConfirm}
+        onClose={() => setShowGunConfirm(false)}
+        title="Confirm Gun Purchase"
       >
-        {renderQuickBuyContent()}
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <p>
+            Buy <strong>{pendingGunPurchase.qty}</strong> gun(s) for <strong>${pendingGunPurchase.cost.toLocaleString()}</strong>?
+          </p>
+          <button
+            className="action-btn"
+            onClick={() => {
+              updateCash(-pendingGunPurchase.cost);
+              // Always add guns to city pool (create if needed)
+              const gunsByCity = { ...(state.gunsByCity || {}) };
+              const city = state.currentCity;
+              const newAmount = (gunsByCity[city] || 0) + pendingGunPurchase.qty;
+              dispatch({ type: 'UPDATE_GUNS_BY_CITY', city, amount: newAmount });
+              addNotification(`Purchased ${pendingGunPurchase.qty} gun${pendingGunPurchase.qty > 1 ? 's' : ''} for $${pendingGunPurchase.cost.toLocaleString()}`, 'success');
+              setShowGunConfirm(false);
+              setShowQuickBuyModal(false);
+            }}
+          >
+            Confirm
+          </button>
+          <button
+            className="action-btn"
+            style={{ background: '#ff6666' }}
+            onClick={() => setShowGunConfirm(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
+      {/* Gang Recruit Confirmation Modal */}
+      <Modal
+        isOpen={showGangConfirm}
+        onClose={() => setShowGangConfirm(false)}
+        title="Confirm Gang Recruitment"
+      >
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <p>
+            Recruit <strong>{pendingGangRecruit.qty}</strong> gang member(s) for <strong>${pendingGangRecruit.cost.toLocaleString()}</strong>?
+          </p>
+          <button
+            className="action-btn"
+            onClick={() => {
+              updateCash(-pendingGangRecruit.cost);
+              // Update gangMembers for current city and gangSize globally
+              const updatedGangMembers = { ...state.gangMembers };
+              const city = state.currentCity;
+              updatedGangMembers[city] = (updatedGangMembers[city] || 0) + pendingGangRecruit.qty;
+              const newGangSize = (state.gangSize || 0) + pendingGangRecruit.qty;
+              dispatch({ type: 'UPDATE_GANG', gangMembers: updatedGangMembers, gangSize: newGangSize });
+              addNotification(`Recruited ${pendingGangRecruit.qty} gang member${pendingGangRecruit.qty > 1 ? 's' : ''} for $${pendingGangRecruit.cost.toLocaleString()}`, 'success');
+              setShowGangConfirm(false);
+              setShowQuickBuyModal(false);
+            }}
+          >
+            Confirm
+          </button>
+          <button
+            className="action-btn"
+            style={{ background: '#ff6666' }}
+            onClick={() => setShowGangConfirm(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
+      {/* Modals */}
+      <Modal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} title="Settings">
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <button
+            className="action-btn"
+            style={{ background: '#ff6666', marginBottom: 12 }}
+            onClick={() => {
+              setShowSettingsModal(false);
+              setShowResetConfirm(true);
+            }}
+          >
+            Reset Game
+          </button>
+          <div style={{ fontSize: '12px', color: '#aaa' }}>
+            This will erase all progress and start a new game.
+          </div>
+        </div>
+      </Modal>
+      <Modal isOpen={showResetConfirm} onClose={() => setShowResetConfirm(false)} title="Confirm Reset">
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <div style={{ marginBottom: 16 }}>
+            Are you sure you want to reset your game? This cannot be undone.
+          </div>
+          <button
+            className="action-btn"
+            style={{ background: '#ff2222', marginRight: 10 }}
+            onClick={() => {
+              resetGame();
+              setShowResetConfirm(false);
+            }}
+          >
+            Yes, Reset
+          </button>
+          <button
+            className="action-btn"
+            onClick={() => setShowResetConfirm(false)}
+          >
+            Cancel
+          </button>
+        </div>
       </Modal>
     </div>
   );
@@ -225,9 +372,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     );
   }
 
-  function renderQuickBuyContent() {
-    const [gunQty, setGunQty] = useState(1);
-    const [gangQty, setGangQty] = useState(1);
+  function renderQuickBuyContent(gunQty: number | "", setGunQty: (n: number | "") => void, gangQty: number | "", setGangQty: (n: number | "") => void) {
     const gunCost = gameData.config.gunCost;
     const gangCost = calculateGangMemberCost();
     function calculateGangMemberCost() {
@@ -246,7 +391,6 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           border: '1px solid #666',
           borderRadius: '10px',
           padding: '15px',
-          marginBottom: '20px',
           textAlign: 'center'
         }}>
           <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
@@ -280,7 +424,11 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             <input
               type="number"
               value={gunQty}
-              onChange={(e) => setGunQty(parseInt(e.target.value) || 1)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "") setGunQty("");
+                else setGunQty(Math.max(1, parseInt(val)));
+              }}
               min="1"
               max="100"
               className="quantity-input"
@@ -288,14 +436,14 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             <button
               className="action-btn"
               onClick={() => {
-                const cost = gunQty * gunCost;
+                const qty = gunQty === "" ? 1 : gunQty;
+                const cost = qty * gunCost;
                 if (cash >= cost) {
-                  systems.bases.addGunsToCity(currentCity, gunQty);
-                  systems.bases.updateCash(-cost);
-                  events.add(`Purchased ${gunQty} guns for $${cost.toLocaleString()}`, 'good');
-                  setShowQuickBuyModal(false);
+                  setPendingGunPurchase({ qty, cost });
+                  setShowGunConfirm(true);
                 }
               }}
+              disabled={gunQty === "" || gunQty < 1}
             >
               Buy
             </button>
@@ -306,7 +454,8 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           background: '#222',
           border: '1px solid #444',
           borderRadius: '10px',
-          padding: '15px'
+          padding: '15px',
+          marginBottom: '15px'
         }}>
           <div style={{
             display: 'flex',
@@ -318,33 +467,34 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             <div style={{ color: '#66ff66' }}>${gangCost.toLocaleString()} each</div>
           </div>
           <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '10px' }}>
-            You have: {state.gangSize || 0} members
+            You have: {state.gangSize || 0} gang members
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
             <input
               type="number"
               value={gangQty}
-              onChange={(e) => setGangQty(parseInt(e.target.value) || 1)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "") setGangQty("");
+                else setGangQty(Math.max(1, parseInt(val)));
+              }}
               min="1"
-              max="50"
+              max="100"
               className="quantity-input"
             />
             <button
               className="action-btn"
               onClick={() => {
-                const cost = gangQty * gangCost;
-                const heat = gangQty * gameData.config.gangRecruitHeat;
+                const qty = gangQty === "" ? 1 : gangQty;
+                const cost = qty * gangCost;
                 if (cash >= cost) {
-                  systems.bases.addGangMembers(currentCity, gangQty);
-                  systems.bases.updateCash(-cost);
-                  systems.heat.updateWarrant(heat);
-                  events.add(`Recruited ${gangQty} gang members for $${cost.toLocaleString()}`, 'good');
-                  events.add(`Gang recruitment increased heat by ${heat.toLocaleString()}`, 'bad');
-                  setShowQuickBuyModal(false);
+                  setPendingGangRecruit({ qty, cost });
+                  setShowGangConfirm(true);
                 }
               }}
+              disabled={gangQty === "" || gangQty < 1}
             >
-              Buy
+              Recruit
             </button>
           </div>
         </div>

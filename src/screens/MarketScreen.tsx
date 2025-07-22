@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useGame, useCurrentCity, useCash } from '../contexts/GameContext';
+import { useGame } from '../contexts/GameContext.jsx';
+// @ts-ignore
 import { gameData } from '../game/data/gameData';
 import { Modal } from '../components/Modal';
 
@@ -8,15 +9,23 @@ interface MarketScreenProps {
 }
 
 const MarketScreen: React.FC<MarketScreenProps> = ({ onNavigate }) => {
-  const { state, systems, updateGameState, refreshUI, events } = useGame();
-  const currentCity = useCurrentCity();
-  const cash = useCash();
+  const { state, updateCash, travelToCity } = useGame();
+  const currentCity = state.currentCity;
+  const cash = state.cash;
   const [selectedCity, setSelectedCity] = useState(currentCity);
   const [showTravelModal, setShowTravelModal] = useState(false);
 
   const cities = Object.keys(gameData.cities);
   const prices = state.cityPrices?.[selectedCity] || {};
-  const travelCost = systems.trading.calculateTravelCost(selectedCity);
+  // Calculate travel cost (moved from trading system)
+  const calculateTravelCost = (destination: string) => {
+    const currentDistance = gameData.cities[currentCity].distanceIndex;
+    const destDistance = gameData.cities[destination].distanceIndex;
+    const distance = Math.abs(currentDistance - destDistance);
+    const cost = gameData.config.baseTravelCost + (distance * 100);
+    return Math.min(cost, gameData.config.maxTravelCost);
+  };
+  const travelCost = calculateTravelCost(selectedCity);
 
   const handleFastTravel = () => {
     console.log('handleFastTravel called');
@@ -24,22 +33,9 @@ const MarketScreen: React.FC<MarketScreenProps> = ({ onNavigate }) => {
   };
 
   const confirmFastTravel = () => {
-    console.log('Fast travel confirmed:', selectedCity, 'Current city:', currentCity, 'Travel cost:', travelCost, 'Cash:', cash);
-    // Deduct cost
-    state.updateCash(-travelCost);
-    // Actually travel
-    state.travelToCity(selectedCity);
-    // Apply travel effects
-    systems.heat.applyTravelHeatReduction();
-    systems.heat.checkPoliceRaid();
-    systems.heat.generateGangHeat();
-    events.add(`✈️ Arrived in ${selectedCity}`, 'good');
-    // UI update
-    refreshUI();
+    updateCash(-travelCost);
+    travelToCity(selectedCity);
     setShowTravelModal(false);
-    setTimeout(() => {
-      console.log('After travel: currentCity:', state.get ? state.get('currentCity') : state.currentCity);
-    }, 100);
   };
 
   const handleTradeHere = () => {

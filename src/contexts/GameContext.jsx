@@ -2,83 +2,15 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 // import { gameState } from '../game/gameState'; // No longer used for state
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
-
-// --- Types ---
-interface GameState {
-  playerName: string;
-  cash: number;
-  gangSize: number;
-  warrant: number;
-  day: number;
-  guns: number;
-  currentCity: string;
-  daysInCurrentCity: number;
-  daysSinceTravel: number;
-  lastTravelDay: number;
-  currentScreen: string;
-  heatLevel: number;
-  inventory: Record<string, number>;
-  bases: Record<string, any>;
-  gangMembers: Record<string, number>;
-  gunsByCity: Record<string, number>;
-  citySupply: Record<string, any>;
-  cityPrices: Record<string, any>;
-  lastPurchase: Record<string, any>;
-  saveVersion: string;
-  lastSaved: number;
-  notifications: any[];
-  achievements: {
-    unlocked: string[];
-    progress: Record<string, number>;
-  };
-  assets: {
-    owned: Record<string, any[]>; // assetId -> array of asset instances
-    wearing: { jewelry: string[] }; // instanceIds of worn jewelry
-  };
-  // Add more fields as needed
-}
-
-interface GameContextType {
-  state: GameState;
-  dispatch: React.Dispatch<any>;
-  buyDrug: (drug: string, amount: number, price: number) => void;
-  sellDrug: (drug: string, amount: number, price: number) => void;
-  updateCash: (amount: number) => void;
-  updateInventory: (drug: string, amount: number) => void;
-  travelToCity: (city: string) => void;
-  regeneratePrices: () => void;
-  resetGame: () => void;
-  sellAllDrugs: () => { totalEarned: number; drugsSold: string[] };
-  buyAsset: (assetId: string) => { success: boolean; error?: string };
-  sellAsset: (instanceId: string) => { success: boolean; error?: string };
-  wearJewelry: (instanceId: string) => { success: boolean };
-  removeJewelry: (instanceId: string) => { success: boolean };
-  getOwnedAssets: (type: string) => Record<string, any[]>;
-  getAllOwnedInstances: () => any[];
-  getWornJewelry: () => string[];
-  getAssetSummary: () => { totalValue: number; flexScore: number };
-  getNotifications: () => any[];
-  getUnreadNotifications: () => any[];
-  markNotificationAsRead: (id: number) => void;
-  markAllNotificationsAsRead: () => void;
-  clearNotifications: () => void;
-  addNotification: (message: string, nType?: string) => void;
-  getAvailableGangMembers: () => number;
-  getAvailableGangMembersInCity: (city: string) => number;
-  getAvailableGunsInCity: (city: string) => number;
-  getAvailableRaidTargets: (city: string) => any[];
-  executeRaid: (targetId: string, raidGangSize: number, city: string) => any;
-  calculateRaidSuccess: (raidGangSize: number, guns: number, difficulty: number, enemyGang: number) => number;
-  getDifficultyColor: (difficulty: number) => string;
-  getDifficultyText: (difficulty: number) => string;
-  // Add more actions as needed
-}
+import { RaidSystem } from '../game/systems/raid';
 
 // --- Price & Supply Generation ---
-function generateCityPrices(city: string, gameData: any) {
+function generateCityPrices(city, gameData) {
+  /** @type {any} */
   const cityData = gameData.cities[city];
-  const prices: Record<string, number> = {};
-  Object.entries(gameData.drugs).forEach(([drug, drugData]: [string, any]) => {
+  /** @type {any} */
+  const prices = {};
+  Object.entries(gameData.drugs).forEach(([drug, drugData]) => {
     const basePrice = drugData.basePrice;
     const variation = (Math.random() - 0.5) * drugData.volatility;
     const price = Math.round(basePrice * (1 + variation) * cityData.heatModifier);
@@ -87,9 +19,11 @@ function generateCityPrices(city: string, gameData: any) {
   return prices;
 }
 
-function generateAllCityPricesAndSupply(gameData: any) {
-  const cityPrices: Record<string, any> = {};
-  const citySupply: Record<string, any> = {};
+function generateAllCityPricesAndSupply(gameData) {
+  /** @type {any} */
+  const cityPrices = {};
+  /** @type {any} */
+  const citySupply = {};
   Object.keys(gameData.cities).forEach(city => {
     cityPrices[city] = generateCityPrices(city, gameData);
     citySupply[city] = {};
@@ -103,9 +37,9 @@ function generateAllCityPricesAndSupply(gameData: any) {
 // --- Initial State ---
 const initialPricesAndSupply = generateAllCityPricesAndSupply(gameData);
 
-const initialState: GameState = {
+const initialState = {
   playerName: 'Player',
-  cash: 5000,
+  cash: 1000000,
   gangSize: 0,
   warrant: 0,
   day: 1,
@@ -155,7 +89,7 @@ const initialState: GameState = {
 };
 
 // --- Reducer ---
-function gameReducer(state: GameState, action: any): GameState {
+function gameReducer(state, action) {
   switch (action.type) {
     case 'UPDATE_CASH':
       return { ...state, cash: Math.max(0, state.cash + action.amount) };
@@ -233,11 +167,11 @@ function gameReducer(state: GameState, action: any): GameState {
       const { instanceId, assetId, resaleValue } = action;
       const owned = { ...state.assets.owned };
       if (!owned[assetId]) return state;
-      owned[assetId] = owned[assetId].filter((inst: any) => inst.instanceId !== instanceId);
+      owned[assetId] = owned[assetId].filter((inst) => inst.instanceId !== instanceId);
       if (owned[assetId].length === 0) delete owned[assetId];
       // Remove from wearing if jewelry
       const wearing = { ...state.assets.wearing };
-      wearing.jewelry = wearing.jewelry.filter((id: string) => id !== instanceId);
+      wearing.jewelry = wearing.jewelry.filter((id) => id !== instanceId);
       return {
         ...state,
         cash: state.cash + resaleValue,
@@ -264,7 +198,7 @@ function gameReducer(state: GameState, action: any): GameState {
     case 'REMOVE_JEWELRY': {
       const { instanceId } = action;
       const wearing = { ...state.assets.wearing };
-      wearing.jewelry = wearing.jewelry.filter((id: string) => id !== instanceId);
+      wearing.jewelry = wearing.jewelry.filter((id) => id !== instanceId);
       return {
         ...state,
         assets: {
@@ -274,13 +208,13 @@ function gameReducer(state: GameState, action: any): GameState {
       };
     }
     case 'MARK_NOTIFICATION_AS_READ': {
-      const notifications = state.notifications.map((n: any) =>
+      const notifications = state.notifications.map((n) =>
         n.id === action.id ? { ...n, read: true } : n
       );
       return { ...state, notifications };
     }
     case 'MARK_ALL_NOTIFICATIONS_AS_READ': {
-      const notifications = state.notifications.map((n: any) => ({ ...n, read: true }));
+      const notifications = state.notifications.map((n) => ({ ...n, read: true }));
       return { ...state, notifications };
     }
     case 'CLEAR_NOTIFICATIONS': {
@@ -309,9 +243,34 @@ function gameReducer(state: GameState, action: any): GameState {
       };
     }
     case 'UPDATE_BASES': {
+      // Always store flat arrays for each city
+      const newBases = {};
+      Object.entries(action.bases).forEach(([city, baseList]) => {
+        if (baseList && (Array.isArray(baseList) ? baseList.length > 0 : Object.keys(baseList).length > 0)) {
+          let arr = [];
+          if (Array.isArray(baseList)) {
+            arr = baseList.flat(Infinity);
+          } else {
+            arr = [baseList];
+          }
+          // Filter to only include objects with required Base properties (id, city, type, level, inventory, income, capacity)
+          newBases[city] = arr.filter(x => x && typeof x === 'object' &&
+            typeof x.id === 'string' &&
+            typeof x.city === 'string' &&
+            (typeof x.type === 'string' || typeof x.type === 'number') &&
+            typeof x.level === 'number' &&
+            typeof x.inventory === 'object' &&
+            typeof x.income === 'number' &&
+            typeof x.capacity === 'number');
+        } else {
+          newBases[city] = [];
+        }
+      });
+      console.log('Reducer: newBases after filter:', newBases);
       return {
         ...state,
-        bases: action.bases,
+        // @ts-expect-error: We guarantee newBases is correct at runtime
+        bases: newBases,
       };
     }
     case 'UPDATE_GUNS_BY_CITY': {
@@ -331,9 +290,9 @@ function gameReducer(state: GameState, action: any): GameState {
 }
 
 // --- Context ---
-const GameContext = createContext<GameContextType | undefined>(undefined);
+const GameContext = createContext(undefined);
 
-export function GameProvider({ children }: { children: React.ReactNode }) {
+export function GameProvider({ children }) {
   // Load from localStorage if present
   const loadState = () => {
     try {
@@ -343,6 +302,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // MIGRATION: Ensure assets always exists
         if (!parsed.assets) {
           parsed.assets = { owned: {}, wearing: { jewelry: [] } };
+        }
+        // MIGRATION: Ensure bases are always arrays
+        if (parsed.bases) {
+          Object.keys(parsed.bases).forEach(city => {
+            const val = parsed.bases[city];
+            if (!Array.isArray(val)) {
+              parsed.bases[city] = val ? [val] : [];
+            }
+          });
         }
         return parsed;
       }
@@ -363,12 +331,69 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state]);
 
+  // --- Daily Game Loop: Advance day and generate base income/drug depletion ---
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // For each city with bases
+      const updatedBases = { ...state.bases };
+      let totalProfit = 0;
+      const now = Date.now();
+      Object.entries(updatedBases).forEach(([city, baseList]) => {
+        const basesArr = Array.isArray(baseList) ? baseList : [baseList];
+        updatedBases[city] = basesArr.map((base) => {
+          // Only operate if base is operational (enough gang, guns, and at least 1 drug)
+          const baseType = gameData.baseTypes[base.type] || gameData.baseTypes[base.level] || {};
+          const requiredGang = baseType.gangRequired || 4;
+          const requiredGuns = baseType.gunsRequired || 2;
+          const hasEnoughGang = (base.assignedGang || 0) >= requiredGang;
+          const hasEnoughGuns = (base.guns || 0) >= requiredGuns;
+          const drugsInBase = base.inventory ? (Object.values(base.inventory).reduce((sum, qty) => sum + qty, 0)) : 0;
+          const hasDrugs = drugsInBase > 0;
+          if (!(hasEnoughGang && hasEnoughGuns && hasDrugs)) {
+            return base;
+          }
+          // Track lastDrugSale (real time, ms)
+          const lastDrugSale = base.lastDrugSale || base.lastCollected || now;
+          const hoursElapsed = Math.floor((now - lastDrugSale) / (1000 * 60 * 60));
+          if (hoursElapsed < 1) return base;
+          let newInventory = { ...base.inventory };
+          let profit = 0;
+          let sales = 0;
+          for (let i = 0; i < hoursElapsed; i++) {
+            // For each drug, sell 1 unit if available
+            Object.keys(newInventory).forEach(d => {
+              if (newInventory[d] > 0) {
+                newInventory[d] -= 1;
+                const price = state.cityPrices?.[city]?.[d] || gameData.drugs[d]?.basePrice || 0;
+                profit += price * 3;
+                sales = i + 1; // Track the last hour processed
+              }
+            });
+          }
+          if (profit > 0) {
+            totalProfit += profit;
+          }
+          return {
+            ...base,
+            inventory: newInventory,
+            lastDrugSale: lastDrugSale + hoursElapsed * 60 * 60 * 1000, // advance by hours
+          };
+        });
+      });
+      if (totalProfit > 0) {
+        dispatch({ type: 'UPDATE_CASH', amount: totalProfit });
+      }
+      dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
+    }, 60000); // 60 seconds
+    return () => clearInterval(interval);
+  }, [state, dispatch]);
+
   // --- Actions ---
-  const updateCash = (amount: number) => {
+  const updateCash = (amount) => {
     dispatch({ type: 'UPDATE_CASH', amount });
   };
 
-  const updateInventory = (drug: string, amount: number) => {
+  const updateInventory = (drug, amount) => {
     dispatch({ type: 'UPDATE_INVENTORY', drug, amount });
     // For quick buy: guns/gang
     if (drug === 'guns' && amount > 0) {
@@ -379,21 +404,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const buyDrug = (drug: string, amount: number, price: number) => {
+  const buyDrug = (drug, amount, price) => {
     updateCash(-amount * price);
     updateInventory(drug, amount);
     dispatch({ type: 'UPDATE_SUPPLY', drug, amount: -amount, city: state.currentCity });
     addNotification(`Bought ${amount} ${drug} for $${(amount * price).toLocaleString()}`, 'success');
   };
 
-  const sellDrug = (drug: string, amount: number, price: number) => {
+  const sellDrug = (drug, amount, price) => {
     updateCash(amount * price);
     updateInventory(drug, -amount);
     dispatch({ type: 'UPDATE_SUPPLY', drug, amount, city: state.currentCity });
     addNotification(`Sold ${amount} ${drug} for $${(amount * price).toLocaleString()}`, 'success');
   };
 
-  const travelToCity = (city: string) => {
+  const travelToCity = (city) => {
     dispatch({ type: 'TRAVEL_TO_CITY', city });
     addNotification(`Traveled to ${city}`, 'info');
   };
@@ -412,7 +437,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const { inventory, currentCity, cityPrices } = state;
     const prices = cityPrices?.[currentCity] || {};
     let totalEarned = 0;
-    const drugsSold: string[] = [];
+    const drugsSold = [];
     Object.keys(inventory).forEach(drug => {
       const qty = inventory[drug] || 0;
       if (qty > 0) {
@@ -426,56 +451,150 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   };
 
   // --- Asset Actions & Selectors ---
-  const buyAsset = (assetId: string) => {
-    const asset = gameData.assets.find((a: any) => a.id === assetId);
+  const buyAsset = (assetId) => {
+    const asset = gameData.assets.find((a) => a.id === assetId);
     if (!asset) return { success: false, error: 'Asset not found' };
     if (state.cash < asset.cost) return { success: false, error: 'Not enough cash' };
-    // Storage checks for cars/jewelry can be added here
+    // --- Storage checks for jewelry/cars ---
+    if (asset.type === 'jewelry') {
+      // Count worn + stored jewelry
+      const wornCount = state.assets.wearing.jewelry.length;
+      const ownedJewelry = Object.values(state.assets.owned)
+        .flat()
+        .filter((inst) => inst.type === 'jewelry');
+      const storedJewelry = ownedJewelry.length - wornCount;
+      // Calculate total jewelry storage from properties
+      const propertyStorage = Object.values(state.assets.owned)
+        .flat()
+        .filter((inst) => inst.type === 'property')
+        .reduce((sum, prop) => sum + (prop.capacity?.jewelry || 0), 0);
+      const maxJewelry = 2 + propertyStorage;
+      if (ownedJewelry.length >= maxJewelry) {
+        return { success: false, error: `Jewelry storage full! Buy more property to store more jewelry.` };
+      }
+    }
+    if (asset.type === 'car') {
+      // Count owned cars
+      const ownedCars = Object.values(state.assets.owned)
+        .flat()
+        .filter((inst) => inst.type === 'car');
+      // Calculate total car storage from properties
+      const propertyStorage = Object.values(state.assets.owned)
+        .flat()
+        .filter((inst) => inst.type === 'property')
+        .reduce((sum, prop) => sum + (prop.capacity?.cars || 0), 0);
+      if (ownedCars.length >= propertyStorage) {
+        return { success: false, error: `Car storage full! Buy more property to store more cars.` };
+      }
+    }
+    // --- Assign cityPurchased and storagePropertyId ---
     const instanceId = `${assetId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let storagePropertyId = undefined;
+    if (asset.type === 'jewelry' && state.assets.wearing.jewelry.length >= 2) {
+      // Find a property with available jewelry storage
+      const properties = Object.values(state.assets.owned)
+        .flat()
+        .filter((inst) => inst.type === 'property');
+      let assigned = false;
+      for (const prop of properties) {
+        const propJewelry = Object.values(state.assets.owned)
+          .flat()
+          .filter((inst) => inst.type === 'jewelry' && (inst.storagePropertyId === prop.instanceId)).length;
+        if (propJewelry < (prop.capacity || 0)) {
+          storagePropertyId = prop.instanceId;
+          assigned = true;
+          break;
+        }
+      }
+      if (!assigned && properties.length > 0) {
+        storagePropertyId = properties[0].instanceId;
+      }
+    }
+    if (asset.type === 'car') {
+      // Find a property with available car storage
+      const properties = Object.values(state.assets.owned)
+        .flat()
+        .filter((inst) => inst.type === 'property');
+      let assigned = false;
+      for (const prop of properties) {
+        const propCars = Object.values(state.assets.owned)
+          .flat()
+          .filter((inst) => inst.type === 'car' && (inst.storagePropertyId === prop.instanceId)).length;
+        if (propCars < (prop.capacity || 0)) {
+          storagePropertyId = prop.instanceId;
+          assigned = true;
+          break;
+        }
+      }
+      if (!assigned && properties.length > 0) {
+        storagePropertyId = properties[0].instanceId;
+      }
+    }
     const assetData = {
       ...asset,
       instanceId,
       purchaseDate: state.day,
       purchasePrice: asset.cost,
       resaleValue: asset.resaleValue || Math.floor(asset.cost * 0.9),
+      cityPurchased: state.currentCity,
+      storagePropertyId,
     };
     dispatch({ type: 'BUY_ASSET', assetId, assetData });
     addNotification(`Purchased ${asset.name} for $${asset.cost.toLocaleString()}`, 'success');
     return { success: true };
   };
-  const sellAsset = (instanceId: string) => {
+
+  const sellAsset = (instanceId) => {
     // Find assetId by instanceId
     let assetId = null;
     let resaleValue = 0;
     let assetName = '';
+    let assetType = '';
+    let cityPurchased = '';
+    let storagePropertyId = '';
+    let isWorn = false;
     for (const [id, arr] of Object.entries(state.assets.owned)) {
-      const inst = (arr as any[]).find(a => a.instanceId === instanceId);
+      const inst = (arr).find(a => a.instanceId === instanceId);
       if (inst) {
         assetId = id;
         resaleValue = inst.resaleValue;
         assetName = inst.name;
+        assetType = inst.type;
+        cityPurchased = inst.cityPurchased;
+        storagePropertyId = inst.storagePropertyId;
+        isWorn = state.assets.wearing.jewelry.includes(instanceId);
         break;
       }
     }
     if (!assetId) return { success: false, error: 'Asset not found' };
+    // --- Enforce city rules ---
+    if (assetType === 'jewelry') {
+      if (!isWorn && state.currentCity !== cityPurchased) {
+        return { success: false, error: `You must be in ${cityPurchased} to sell this jewelry (not currently worn).` };
+      }
+    } else if (assetType === 'car' || assetType === 'property') {
+      if (state.currentCity !== cityPurchased) {
+        return { success: false, error: `You must be in ${cityPurchased} to sell this ${assetType}.` };
+      }
+    }
     dispatch({ type: 'SELL_ASSET', instanceId, assetId, resaleValue });
     addNotification(`Sold ${assetName} for $${resaleValue.toLocaleString()}`, 'success');
     return { success: true };
   };
-  const wearJewelry = (instanceId: string) => {
+  const wearJewelry = (instanceId) => {
     dispatch({ type: 'WEAR_JEWELRY', instanceId });
     return { success: true };
   };
-  const removeJewelry = (instanceId: string) => {
+  const removeJewelry = (instanceId) => {
     dispatch({ type: 'REMOVE_JEWELRY', instanceId });
     return { success: true };
   };
-  const getOwnedAssets = (type: string) => {
+  const getOwnedAssets = (type) => {
     // type: 'jewelry', 'car', 'property', etc.
     const owned = state.assets.owned;
-    const result: Record<string, any[]> = {};
+    const result = {};
     for (const [id, arr] of Object.entries(owned)) {
-      const asset = gameData.assets.find((a: any) => a.id === id);
+      const asset = gameData.assets.find((a) => a.id === id);
       if (asset && asset.type === type) {
         result[id] = arr;
       }
@@ -505,9 +624,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return state.notifications || [];
   };
   const getUnreadNotifications = () => {
-    return (state.notifications || []).filter((n: any) => !n.read);
+    return (state.notifications || []).filter((n) => !n.read);
   };
-  const markNotificationAsRead = (id: number) => {
+  const markNotificationAsRead = (id) => {
     dispatch({ type: 'MARK_NOTIFICATION_AS_READ', id });
   };
   const markAllNotificationsAsRead = () => {
@@ -517,7 +636,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'CLEAR_NOTIFICATIONS' });
   };
 
-  const addNotification = (message: string, nType: string = 'info') => {
+  const addNotification = (message, nType = 'info') => {
     dispatch({ type: 'ADD_NOTIFICATION', message, nType });
   };
 
@@ -525,115 +644,90 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   function getAvailableGangMembers() {
     // Total unassigned gang members (global)
     let assigned = 0;
-    Object.values(state.bases || {}).forEach((cityBases: any) => {
-      (cityBases as any[]).forEach((base: any) => {
+    Object.values(state.bases || {}).forEach((cityBases) => {
+      (cityBases).forEach((base) => {
         assigned += base.assignedGang || 0;
       });
     });
     return Math.max(0, (state.gangSize || 0) - assigned);
   }
-  function getAvailableGangMembersInCity(city: string) {
+  function getAvailableGangMembersInCity(city) {
     // Unassigned gang members in a specific city
     const totalInCity = (state.gangMembers && state.gangMembers[city]) || 0;
     let assignedInCity = 0;
     const cityBases = (state.bases && state.bases[city]) || [];
-    (cityBases as any[]).forEach((base: any) => {
+    (cityBases).forEach((base) => {
       assignedInCity += base.assignedGang || 0;
     });
     return Math.max(0, totalInCity - assignedInCity);
   }
-  function getAvailableGunsInCity(city: string) {
+  function getAvailableGunsInCity(city) {
     // Unassigned guns in a specific city
     const totalInCity = (state.gunsByCity && state.gunsByCity[city]) || (state.guns || 0);
     let assignedInCity = 0;
     const cityBases = (state.bases && state.bases[city]) || [];
-    (cityBases as any[]).forEach((base: any) => {
+    (cityBases).forEach((base) => {
       assignedInCity += base.guns || 0;
     });
     return Math.max(0, totalInCity - assignedInCity);
   }
-  function getAvailableRaidTargets(city: string) {
-    // Demo targets (replace with real logic as needed)
-    return [
-      {
-        id: 'target1',
-        name: 'Enemy Base Alpha',
-        city,
-        cash: 5000,
-        drugs: { Cocaine: 10, Weed: 20 },
-        gangSize: 5,
-        difficulty: 2,
-        lastRaid: 0,
-      },
-      {
-        id: 'target2',
-        name: 'Enemy Base Beta',
-        city,
-        cash: 8000,
-        drugs: { Meth: 15 },
-        gangSize: 8,
-        difficulty: 3,
-        lastRaid: 0,
-      },
-    ];
+
+  // --- Raid System Integration ---
+  const raidSystemRef = React.useRef(null);
+  if (!raidSystemRef.current) {
+    // Minimal event logger for RaidSystem
+    const events = {
+      add: (msg, type) => addNotification(msg, type),
+    };
+    // Provide a minimal state interface for RaidSystem
+    const raidState = {
+      getAvailableGangMembersInCity: (city) => getAvailableGangMembersInCity(city),
+      getAvailableGunsInCity: (city) => getAvailableGunsInCity(city),
+      updateCash: (amount) => updateCash(amount),
+      updateInventory: (drug, amount) => updateInventory(drug, amount),
+      updateWarrant: (amount) => dispatch({ type: 'UPDATE_CASH', amount: 0 }), // stub, implement if needed
+      trackAchievement: () => {}, // stub
+      addNotification: (msg, type) => addNotification(msg, type),
+      incrementCityRaidActivity: () => {}, // stub
+    };
+    raidSystemRef.current = new RaidSystem(raidState, events, gameData);
   }
-  function calculateRaidSuccess(raidGangSize: number, guns: number, difficulty: number, enemyGang: number) {
+  const raidSystem = raidSystemRef.current;
+
+  // --- Raid Selectors & Actions (using RaidSystem) ---
+  function getAvailableRaidTargets(city) {
+    return raidSystem.getAvailableTargets(city);
+  }
+  function executeRaid(targetId, raidGangSize, city) {
+    // The RaidSystem will handle cooldown and all logic
+    return raidSystem.executeRaid(targetId, raidGangSize);
+  }
+  function calculateRaidSuccess(raidGangSize, guns, difficulty, enemyGang) {
     // Simple formula: more gang/guns = higher chance, higher difficulty/enemy = lower
     let base = 0.5 + 0.03 * (raidGangSize + guns) - 0.04 * (difficulty + enemyGang);
     return Math.max(0.05, Math.min(0.95, base));
   }
-  function getDifficultyColor(difficulty: number) {
+  function getDifficultyColor(difficulty) {
     if (difficulty <= 1) return '#66ff66';
     if (difficulty === 2) return '#ffff00';
     return '#ff6666';
   }
-  function getDifficultyText(difficulty: number) {
+  function getDifficultyText(difficulty) {
     if (difficulty <= 1) return 'Easy';
     if (difficulty === 2) return 'Medium';
     return 'Hard';
   }
-  function executeRaid(targetId: string, raidGangSize: number, city: string) {
-    // Find target (stub logic)
-    const targets = getAvailableRaidTargets(city);
-    const target = targets.find((t: any) => t.id === targetId);
-    if (!target) return { error: 'Target not found' };
-    // Cooldown check (stub: always available)
-    // Calculate success
-    const guns = getAvailableGunsInCity(city);
-    const successChance = calculateRaidSuccess(raidGangSize, guns, target.difficulty, target.gangSize);
-    const roll = Math.random();
-    const heatIncrease = 1000 + Math.floor(Math.random() * 2000);
-    if (roll < successChance) {
-      // Success: loot cash/drugs
-      dispatch({ type: 'UPDATE_CASH', amount: target.cash });
-      let drugsWon: string[] = [];
-      Object.entries(target.drugs || {}).forEach(([drug, amount]) => {
-        if (amount > 0) {
-          dispatch({ type: 'UPDATE_INVENTORY', drug, amount });
-          drugsWon.push(`${amount} ${drug}`);
-        }
-      });
-      addNotification(
-        `Raid successful! Looted $${target.cash.toLocaleString()}${drugsWon.length ? ' and ' + drugsWon.join(', ') : ''}.`,
-        'success'
-      );
-      return {
-        success: true,
-        loot: { cash: target.cash, drugs: target.drugs },
-        heatIncrease,
-      };
-    } else {
-      // Failure
-      addNotification('Raid failed! Your gang was defeated.', 'error');
-      return {
-        success: false,
-        heatIncrease,
-      };
-    }
+  function getAllRaidTargets(city) {
+    return raidSystem.enemyBases[city] || [];
+  }
+  function isRaidTargetOnCooldown(target) {
+    const currentTime = Date.now();
+    const cooldownPeriod = 5 * 60 * 1000;
+    return (currentTime - target.lastRaid) < cooldownPeriod;
   }
 
   // --- Context Value ---
-  const value: GameContextType = {
+  const value = {
     state,
     dispatch,
     buyDrug,
@@ -662,6 +756,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     getAvailableGangMembersInCity,
     getAvailableGunsInCity,
     getAvailableRaidTargets,
+    getAllRaidTargets,
+    isRaidTargetOnCooldown,
     executeRaid,
     calculateRaidSuccess,
     getDifficultyColor,

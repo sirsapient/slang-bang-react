@@ -160,7 +160,8 @@ export const gameData = {
             upgradeCost: 15000, 
             maxInventory: 60, // 10 per drug, 6 drugs
             maxSafe: 50000,
-            maxCash: 25000 // Cash available for raiding
+            maxCash: 25000, // Cash available for raiding
+            capacity: 6 // Max gang members
         },
         2: { 
             name: 'Safe House', 
@@ -171,7 +172,8 @@ export const gameData = {
             upgradeCost: 40000, 
             maxInventory: 120, // 20 per drug
             maxSafe: 250000,
-            maxCash: 50000 // Cash available for raiding
+            maxCash: 50000, // Cash available for raiding
+            capacity: 12
         },
         3: { 
             name: 'Distribution Center', 
@@ -182,7 +184,8 @@ export const gameData = {
             upgradeCost: 100000, 
             maxInventory: 240, // 40 per drug
             maxSafe: 500000,
-            maxCash: 100000 // Cash available for raiding
+            maxCash: 100000, // Cash available for raiding
+            capacity: 24
         },
         4: { 
             name: 'Drug Fortress', 
@@ -193,7 +196,8 @@ export const gameData = {
             upgradeCost: null, 
             maxInventory: 480, // 80 per drug
             maxSafe: 1000000,
-            maxCash: 200000 // Cash available for raiding
+            maxCash: 200000, // Cash available for raiding
+            capacity: 48
         }
     },
     

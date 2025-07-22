@@ -1,10 +1,17 @@
 import React from 'react';
-import { useCash, useCurrentCity, useHeatLevel } from '../contexts/GameContext';
+import { useGame } from '../contexts/GameContext.jsx';
 
 export function PlayerCard() {
-  const cash = useCash();
-  const currentCity = useCurrentCity();
-  const heatLevel = useHeatLevel();
+  const context = useGame();
+  let cash = 0;
+  let currentCity = 'Unknown';
+  let heatLevel = 0;
+  if (context) {
+    const { state, gameState } = context;
+    currentCity = state.currentCity || (gameState.data && gameState.data.currentCity) || 'Unknown';
+    heatLevel = state.heat ?? 0;
+    cash = state.cash ?? (gameState.data && gameState.data.cash) ?? 0;
+  }
   
   const getHeatColor = () => {
     if (heatLevel < 20) return '#66ff66';

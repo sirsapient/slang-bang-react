@@ -1,37 +1,47 @@
 // src/screens/MailScreen.tsx
 import React, { useEffect } from 'react';
-import { useGame } from '../contexts/GameContext';
+import { useGame } from '../contexts/GameContext.jsx';
+import { Modal } from '../components/Modal';
 
 interface MailScreenProps {
   onNavigate: (screen: string) => void;
 }
 
 export default function MailScreen({ onNavigate }: MailScreenProps) {
-  const { state, refreshUI } = useGame();
-  const notifications = state.getNotifications();
-  const unreadCount = state.getUnreadNotifications().length;
+  const { getNotifications, getUnreadNotifications, markNotificationAsRead, markAllNotificationsAsRead, clearNotifications } = useGame();
+  const notifications = getNotifications();
+  const unreadCount = getUnreadNotifications().length;
+  const [showConfirmModal, setShowConfirmModal] = React.useState<null | 'clear' | 'markAll'>(null);
   
   useEffect(() => {
     // Mark all notifications as read when opening mail
-    state.markAllNotificationsAsRead();
-    refreshUI();
+    markAllNotificationsAsRead();
+    // No refreshUI needed
   }, []);
   
   const handleMarkAsRead = (notificationId: number) => {
-    state.markNotificationAsRead(notificationId);
-    refreshUI();
+    markNotificationAsRead(notificationId);
   };
   
   const handleMarkAllAsRead = () => {
-    state.markAllNotificationsAsRead();
-    refreshUI();
+    setShowConfirmModal('markAll');
   };
   
   const handleClearAll = () => {
-    if (window.confirm('Are you sure you want to clear all notifications?')) {
-      state.clearNotifications();
-      refreshUI();
+    setShowConfirmModal('clear');
+  };
+
+  const confirmAction = () => {
+    if (showConfirmModal === 'clear') {
+      clearNotifications();
+    } else if (showConfirmModal === 'markAll') {
+      markAllNotificationsAsRead();
     }
+    setShowConfirmModal(null);
+  };
+
+  const cancelAction = () => {
+    setShowConfirmModal(null);
   };
   
   const getTimeAgo = (timestamp: number) => {
@@ -165,6 +175,28 @@ export default function MailScreen({ onNavigate }: MailScreenProps) {
           ← Back to Home
         </button>
       </div>
+      {/* In-game confirmation modal */}
+      {showConfirmModal && (
+        <Modal
+          isOpen={!!showConfirmModal}
+          onClose={cancelAction}
+          title={showConfirmModal === 'clear' ? 'Clear All Notifications' : 'Mark All Read'}
+        >
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <p>
+              {showConfirmModal === 'clear'
+                ? 'Are you sure you want to clear all notifications?'
+                : 'Mark all notifications as read?'}
+            </p>
+            <button className="action-btn" onClick={confirmAction}>
+              Confirm
+            </button>
+            <button className="action-btn" style={{ background: '#ff6666' }} onClick={cancelAction}>
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 } 

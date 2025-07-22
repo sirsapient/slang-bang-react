@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { gameState } from './game/gameState';
-import { useGame } from './contexts/GameContext';
+import { useGame } from './contexts/GameContext.jsx';
 import Navigation from './components/Navigation';
 import HomeScreen from './screens/HomeScreen';
 import MarketScreen from './screens/MarketScreen';
@@ -16,65 +15,59 @@ import './App.css';
 import { Modal } from './components/Modal';
 
 function GameContent() {
-  const { state, systems, updateGameState, refreshUI } = useGame();
+  const { state, sellAllDrugs } = useGame();
+  // No systems, updateGameState, or refreshUI in minimal context
   const [currentScreen, setCurrentScreen] = useState('home');
+
+  // Sell All modal state
+  const [showSellAllModal, setShowSellAllModal] = useState(false);
+  const [sellAllSummary, setSellAllSummary] = useState({ total: 0, drugs: [] as string[] });
+
+  // Handler for Sell All button
+  const handleSellAll = () => {
+    console.log('[DEBUG] handleSellAll called (App)');
+    console.trace();
+    const inventory = state.inventory;
+    const currentCity = state.currentCity;
+    const prices = state.cityPrices?.[currentCity] || {};
+    let total = 0;
+    const drugs: string[] = [];
+    Object.keys(inventory).forEach(drug => {
+      const qty = inventory[drug] || 0;
+      if (qty > 0) {
+        const price = prices[drug] || 0;
+        total += price * qty;
+        drugs.push(`${qty} ${drug}`);
+      }
+    });
+    setSellAllSummary({ total, drugs });
+    setShowSellAllModal(true);
+  };
+
+  // Confirm Sell All
+  const confirmSellAll = () => {
+    console.log('[DEBUG] confirmSellAll called (App)');
+    console.trace();
+    const result = sellAllDrugs();
+    setSellAllSummary({ total: result.totalEarned, drugs: result.drugsSold });
+    setShowSellAllModal(false);
+  };
 
   // Initialize game on mount
   useEffect(() => {
-    const initializeGame = () => {
-      // Load saved game
-      const loaded = gameState.load();
-      // Check if we need to generate prices
-      if (!gameState.cityPrices || Object.keys(gameState.cityPrices).length === 0) {
-        systems.trading.generateAllCityPrices();
-        gameState.save();
-      }
-      // Sync cityPrices to React state
-      updateGameState('cityPrices', gameState.cityPrices);
-      // Start game timers
-      const gameTimer = setInterval(() => {
-        advanceDay();
-      }, 60000);
-      const countdownTimer = setInterval(() => {
-        gameState.timeRemaining -= 1000;
-        if (gameState.timeRemaining <= 0) {
-          gameState.timeRemaining = 60000;
-        }
-        refreshUI();
-      }, 1000);
-      const autoSaveTimer = setInterval(() => {
-        gameState.save();
-      }, 10000);
-      // Store timers
-      gameState.gameTimer = gameTimer;
-      gameState.countdownTimer = countdownTimer;
-      return () => {
-        clearInterval(gameTimer);
-        clearInterval(countdownTimer);
-        clearInterval(autoSaveTimer);
-      };
-    };
-    return initializeGame();
+    // No-op for now: loading/saving will be handled via context in the future
+    // You can add localStorage logic here if needed
+    return () => {};
   }, []);
 
   // Advance day function
-  const advanceDay = () => {
-    const newDay = state.day + 1;
-    updateGameState('day', newDay);
-    updateGameState('daysInCurrentCity', state.daysInCurrentCity + 1);
-    updateGameState('daysSinceTravel', state.daysSinceTravel + 1);
-    // Apply daily systems
-    systems.heat.applyWarrantDecay();
-    systems.bases.generateDailyIncome();
-    systems.trading.updateMarketPrices();
-    refreshUI();
-  };
+  // Remove advanceDay logic for now
 
   // Handle screen navigation
   const navigateToScreen = (screen: string) => {
     console.log('navigateToScreen called with:', screen);
     setCurrentScreen(screen);
-    updateGameState('currentScreen', screen);
+    // No updateGameState in minimal context
   };
 
   // Render current screen
@@ -107,27 +100,7 @@ function GameContent() {
 
   return (
     <div className="phone-container">
-      {/* Fixed debug box for overlay test */}
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '300px',
-        height: '100px',
-        background: 'yellow',
-        color: 'black',
-        zIndex: 1000000,
-        fontSize: '20px',
-        fontWeight: 'bold',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: '5px solid red',
-        pointerEvents: 'none',
-      }}>
-        DEBUG OVERLAY VISIBLE?
-      </div>
-      {/* Debug overlay to confirm modal is covering the app */}
+      {/* Debug overlay removed */}
       <div id="modal-debug-overlay"></div>
       <div className="status-bar">
         <div>🔐 Secure</div>
@@ -145,9 +118,29 @@ function GameContent() {
       <div className="screen-container">
         {renderScreen()}
       </div>
+      {/* Sell All Confirmation Modal (global) */}
+      <Modal
+        isOpen={showSellAllModal}
+        onClose={() => setShowSellAllModal(false)}
+        title={`Confirm Sell All`}
+      >
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <p>
+            Sell all drugs for <strong>${sellAllSummary.total.toLocaleString()}</strong>?<br/>
+            <span style={{ fontSize: '12px', color: '#aaa' }}>{sellAllSummary.drugs.join(', ')}</span>
+          </p>
+          <button className="action-btn" onClick={confirmSellAll}>
+            Confirm
+          </button>
+          <button className="action-btn" style={{ background: '#ff6666' }} onClick={() => setShowSellAllModal(false)}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
       <Navigation 
         currentScreen={currentScreen} 
         onNavigate={navigateToScreen}
+        onSellAll={currentScreen === 'trading' ? handleSellAll : undefined}
       />
     </div>
   );

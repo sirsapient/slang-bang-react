@@ -1,22 +1,32 @@
 import React, { useState } from 'react';
-import { useGame, useCash, useCurrentCity } from '../contexts/GameContext';
+// @ts-ignore
+import { useGame } from '../contexts/GameContext.jsx';
 import { Modal } from '../components/Modal';
-import { gameData } from '../game/data/gameData'; // eslint-disable-line @typescript-eslint/no-var-requires
+// @ts-ignore
+import { gameData } from '../game/data/gameData';
 
 interface TravelScreenProps {
   onNavigate: (screen: string) => void;
 }
 
 export default function TravelScreen({ onNavigate }: TravelScreenProps) {
-  const { state, systems, events } = useGame();
-  const cash = useCash();
-  const currentCity = useCurrentCity();
+  const { state, updateCash, updateInventory, travelToCity } = useGame();
+  const cash = state.cash;
+  const currentCity = state.currentCity;
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showArrestModal, setShowArrestModal] = useState(false);
   const [arrestData, setArrestData] = useState<any>(null);
   
-  const heatLevel = systems.heat.getHeatLevelText();
+  // Calculate heat level text
+  const getHeatLevelText = () => {
+    const heat = state.heatLevel;
+    if (heat < 20) return 'Low';
+    if (heat < 40) return 'Medium';
+    if (heat < 70) return 'High';
+    return 'Critical';
+  };
+  const heatLevel = getHeatLevelText();
   const heatColor = heatLevel === 'High' || heatLevel === 'Critical' ? '#ff6666' : '#66ff66';
 
   const handleCityClick = (cityName: string, cost: number) => {
@@ -26,39 +36,50 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
     }
   };
   
+  // Calculate travel cost (moved from trading system)
+  const calculateTravelCost = (destination: string) => {
+    const currentDistance = gameData.cities[currentCity].distanceIndex;
+    const destDistance = gameData.cities[destination].distanceIndex;
+    const distance = Math.abs(currentDistance - destDistance);
+    const cost = gameData.config.baseTravelCost + (distance * 100);
+    return Math.min(cost, gameData.config.maxTravelCost);
+  };
+
   const executeTravel = () => {
     if (!selectedCity) return;
-    
-    const cost = systems.trading.calculateTravelCost(selectedCity);
-    
-    // Deduct cost
-    state.updateCash(-cost);
-    
+    const cost = calculateTravelCost(selectedCity);
+    updateCash(-cost);
     // Check for arrest/bust
     const inventory = state.inventory;
-    const totalDrugs = Object.values(inventory).reduce((a: number, b: any) => a + b, 0);
+    // Calculate total drug value using current city prices
+    const prices = gameData.cities[currentCity]?.prices || {};
+    let totalDrugValue = 0;
+    Object.keys(inventory).forEach(drug => {
+      totalDrugValue += (inventory[drug] || 0) * (prices[drug] || 0);
+    });
     const heat = state.heatLevel;
-    
-    let risk = 0;
-    if (totalDrugs > 0) risk += 4; // Drugs in inventory
-    if (heat >= 40) risk += 1; // High heat
-    if (totalDrugs > 0 && heat >= 70) risk += 2; // High heat + drugs
-    
-    const bustChance = risk * 0.08;
+    let bustChance = 0;
+    if (totalDrugValue > 0) {
+      if (totalDrugValue < 30000) {
+        bustChance = 0.01; // 1% chance for small hauls
+      } else {
+        bustChance = 0.01 + ((totalDrugValue - 30000) / 200000);
+        if (heat >= 40) bustChance += 0.03;
+        if (heat >= 70) bustChance += 0.05;
+        bustChance = Math.min(bustChance, 0.3); // Cap at 30%
+      }
+    }
     const randomRoll = Math.random();
-    
-    if (risk > 0 && randomRoll < bustChance) {
-      // Determine severity
+    if (bustChance > 0 && randomRoll < bustChance) {
+      // Severity based on value
       let severity = 'mild';
-      if (risk >= 5) severity = 'severe';
-      else if (risk >= 3) severity = 'medium';
-      
-      setArrestData({ severity, totalDrugs });
+      if (totalDrugValue >= 200000) severity = 'severe';
+      else if (totalDrugValue >= 100000) severity = 'medium';
+      setArrestData({ severity, totalDrugs: totalDrugValue });
       setShowArrestModal(true);
       setShowConfirm(false);
       return;
     }
-    
     // Normal travel
     completeTravel();
   };
@@ -67,42 +88,14 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
     if (!selectedCity) return;
     
     // Update location
-    state.travelToCity(selectedCity);
-    
-    // Apply heat reduction
-    systems.heat.applyTravelHeatReduction();
-    
-    // Trigger police raid and gang heat
-    systems.heat.checkPoliceRaid();
-    systems.heat.generateGangHeat();
-    
-    // Log event
-    events.add(`✈️ Arrived in ${selectedCity}`, 'good');
-    
-    // Check for new drops
-    checkNewDropsInCity(selectedCity);
-    
-    // Reset state and navigate
+    travelToCity(selectedCity);
+    // TODO: Apply heat reduction, police raid, gang heat, and asset drops if needed
     setShowConfirm(false);
     setSelectedCity(null);
     onNavigate('home');
   };
   
-  const checkNewDropsInCity = (cityName: string) => {
-    // This would check for exclusive asset drops
-    // For now, just a placeholder
-    const cityDrops = systems.assetDrop?.getCityDrops(cityName) || [];
-    const recentDrops = cityDrops.filter((drop: any) => {
-      const timeSinceCreation = Date.now() - drop.createdAt;
-      return timeSinceCreation < 10 * 60 * 1000; // 10 minutes
-    });
-    
-    if (recentDrops.length > 0) {
-      setTimeout(() => {
-        alert(`🌟 New exclusive items available in ${cityName}!`);
-      }, 500);
-    }
-  };
+  // checkNewDropsInCity: TODO for future asset system
   
   const handleArrest = (action: string) => {
     if (!arrestData) return;
@@ -112,39 +105,40 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
     switch (severity) {
       case 'mild':
         if (action === 'pay') {
-          state.updateCash(-1000);
-          state.updateWarrant(-5000);
-          events.add('Bribed police and walked away.', 'good');
+          updateCash(-1000);
+          // TODO: updateWarrant(-5000);
         } else {
-          state.updateWarrant(2000);
-          events.add('Refused bribe - warrant increased.', 'bad');
+          // TODO: updateWarrant(2000);
         }
         break;
         
       case 'medium':
         // Confiscate all drugs
         Object.keys(state.inventory).forEach(drug => {
-          state.updateInventory(drug, -state.inventory[drug]);
+          updateInventory(drug, -state.inventory[drug]);
         });
-        state.updateWarrant(5000);
-        events.add('Police took all your drugs.', 'bad');
+        // TODO: updateWarrant(5000);
         break;
         
       case 'severe':
         // Take all drugs and cash
         Object.keys(state.inventory).forEach(drug => {
-          state.updateInventory(drug, -state.inventory[drug]);
+          updateInventory(drug, -state.inventory[drug]);
         });
         const currentCash = state.cash;
-        state.updateCash(-currentCash);
-        state.updateWarrant(10000);
-        events.add('Arrested! Lost all drugs and cash.', 'bad');
+        updateCash(-currentCash);
+        // TODO: updateWarrant(10000);
         break;
     }
     
     setShowArrestModal(false);
     completeTravel();
   };
+
+  // Utility to normalize city keys
+  function normalizeCityKey(city: string): string {
+    return city.trim();
+  }
 
   return (
     <div className="travel-screen">
@@ -171,13 +165,12 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
       <div id="cityList">
         {Object.entries(gameData.cities).map(([cityName, cityData]) => {
           if (cityName === currentCity) return null;
-          
-          const cost = systems.trading.calculateTravelCost(cityName);
+          const cost = calculateTravelCost(cityName);
           const canAfford = cash >= cost;
-          const hasBase = state.bases?.[cityName] != null;
-          
+          const normCity = normalizeCityKey(cityName);
+          const hasBase = state.bases && state.bases[normCity] && state.bases[normCity].length > 0;
           return (
-          <div
+            <div
               key={cityName}
               className="city-item"
               style={{
@@ -185,11 +178,11 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
                 cursor: canAfford ? 'pointer' : 'not-allowed'
               }}
               onClick={() => canAfford && handleCityClick(cityName, cost)}
-          >
+            >
               <div className="city-header">
                 <div className="city-name">
                   {cityName}
-                  {hasBase && ' 🏢'}
+                  {hasBase && ' 🏠'}
                 </div>
                 <div className="travel-cost" style={{ color: canAfford ? '#ff6666' : '#ff0000' }}>
                   ${cost.toLocaleString()}
@@ -199,9 +192,9 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
                 Population: {(cityData as any).population}
                 {!canAfford && ' • Cannot afford'}
                 {state.heatLevel >= 40 && ' • Will reduce heat'}
-                {hasBase && ' • You own a base here'}
+                {hasBase && ' • You own a house here'}
               </div>
-          </div>
+            </div>
           );
         })}
       </div>
@@ -216,21 +209,32 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
         title="✈️ Confirm Travel"
       >
         <div style={{ textAlign: 'center', padding: '20px' }}>
-          <p dangerouslySetInnerHTML={{ __html: `Travel to ${selectedCity} for $${selectedCity ? systems.trading.calculateTravelCost(selectedCity).toLocaleString() : 0}?${
-            state.heatLevel >= 40 ? '<br><br>🌊 Traveling will reduce your heat level!' : ''
-          }${
-            state.bases?.[selectedCity || ''] ? '<br><br>🏢 You have a base in this city.' : ''
-          }` }} />
+          <div style={{ fontSize: '18px', marginBottom: 10 }}>
+            Travel to <strong>{selectedCity}</strong>?
+          </div>
+          <div style={{ fontSize: '15px', marginBottom: 10 }}>
+            Cost: <span style={{ color: '#ffcc00' }}>${selectedCity ? calculateTravelCost(selectedCity).toLocaleString() : 0}</span>
+          </div>
+          {state.heatLevel >= 40 && (
+            <div style={{ color: '#66ccff', marginBottom: 8 }}>
+              🌊 Traveling will reduce your heat level!
+            </div>
+          )}
+          {state.bases?.[selectedCity || ''] && (
+            <div style={{ color: '#66ff66', marginBottom: 8 }}>
+              🏠 You have a house in this city.
+            </div>
+          )}
           <div style={{ marginTop: '20px' }}>
             <button className="action-btn" onClick={executeTravel}>
-            Confirm
-          </button>
+              Confirm
+            </button>
             <button className="action-btn" style={{ background: '#ff6666', marginLeft: 10 }} onClick={() => {
               setShowConfirm(false);
               setSelectedCity(null);
             }}>
-            Cancel
-          </button>
+              Cancel
+            </button>
           </div>
         </div>
       </Modal>

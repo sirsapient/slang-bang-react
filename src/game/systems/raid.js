@@ -207,7 +207,12 @@ export class RaidSystem {
             
             // Update last raid timestamp
             target.lastRaid = Date.now();
-            
+
+            // Increment city raid activity for base attack probability
+            if (this.state.incrementCityRaidActivity) {
+                this.state.incrementCityRaidActivity(city);
+            }
+
             // Log results
             const raidMsg = `⚔️ Raid successful! Looted $${(loot.cash || 0).toLocaleString()} and drugs`;
             this.events.add(raidMsg, 'good');
@@ -222,12 +227,30 @@ export class RaidSystem {
             const scaledHeat = Math.floor(baseHeat * Math.pow(heatScaling, playerRank - 1));
             this.state.updateWarrant(scaledHeat);
             
+            // Calculate losses
+            const gangLost = Math.floor(gangSize * (0.1 + Math.random() * 0.2));
+            const gunsLost = Math.floor(gangSize * (0.1 + Math.random() * 0.2)); // Assume 1 gun per gang member sent
+            if (gangLost > 0 && this.state.removeGangMembersFromCity) {
+              this.state.removeGangMembersFromCity(city, gangLost);
+            }
+            if (gunsLost > 0 && this.state.removeGunsFromCity) {
+              this.state.removeGunsFromCity(city, gunsLost);
+            }
+            if ((gangLost > 0 || gunsLost > 0) && this.state.addNotification) {
+              this.state.addNotification(`❌ Raid failed! Lost ${gangLost} gang members and ${gunsLost} guns in ${city}.`, 'error');
+            }
+            
             // Track failed raid
             this.state.trackAchievement('totalRaids');
             
             // Update last raid timestamp (even for failed raids)
             target.lastRaid = Date.now();
-            
+
+            // Increment city raid activity for base attack probability
+            if (this.state.incrementCityRaidActivity) {
+                this.state.incrementCityRaidActivity(city);
+            }
+
             const failMsg = `❌ Raid failed! Gained ${scaledHeat.toLocaleString()} heat`;
             this.events.add(failMsg, 'bad');
             this.state.addNotification(failMsg, 'error');

@@ -21,13 +21,13 @@ export class TradingSystem {
         }
         Object.keys(this.data.cities).forEach(city => {
             cityPrices[city] = this.generateCityPrices(city);
-            // Initialize supply for each city if not exists
-            if (!this.state.data.citySupply[city]) {
-                this.state.data.citySupply[city] = {};
-                Object.keys(this.data.drugs).forEach(drug => {
-                    this.state.data.citySupply[city][drug] = Math.floor(Math.random() * 150) + 50;
-                });
-            }
+            // Always initialize supply for each city
+            this.state.data.citySupply[city] = {};
+            Object.keys(this.data.drugs).forEach(drug => {
+                this.state.data.citySupply[city][drug] = Math.floor(Math.random() * 150) + 50;
+            });
+            // DEBUG: Log initial supply for this city
+            console.log(`[DEBUG] Initialized supply for ${city}:`, this.state.data.citySupply[city]);
         });
         // IMPORTANT: Set cityPrices on the gameState object
         this.state.cityPrices = cityPrices;
@@ -121,6 +121,9 @@ export class TradingSystem {
      * @returns {{success: boolean, error?: string}}
      */
     buyDrug(drug, quantity) {
+        console.log('[DEBUG] buyDrug this.state:', this.state);
+        console.log('[DEBUG] buyDrug this.state.updateInventory:', this.state.updateInventory);
+        console.log('[DEBUG] buyDrug this.state.updateCash:', this.state.updateCash);
         const city = this.state.get('currentCity');
         const price = this.state.cityPrices[city][drug];
         const totalCost = price * quantity;

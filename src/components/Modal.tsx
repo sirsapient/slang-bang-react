@@ -21,35 +21,58 @@ export function Modal({
   showCloseButton = true,
   maxWidth = '500px' 
 }: ModalProps) {
-  console.log('Modal rendering with isOpen:', isOpen);
+  // Remove or comment out the debug log for isOpen
+  // console.log('Modal rendering with isOpen:', isOpen);
   if (!isOpen) return null;
 
-  // Use React Portal to render modal at the document body
+  // Use dedicated modal root if available
+  const modalRoot = document.getElementById('modal-root') || document.body;
+
   return ReactDOM.createPortal(
-    <div className="modal-overlay" onClick={onClose}>
+    <div 
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        background: 'rgba(0, 0, 0, 0.7)',
+        zIndex: 999999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
       <div 
-        className="modal-content" 
-        style={{ maxWidth }}
+        style={{ 
+          background: '#222',
+          color: '#fff',
+          borderRadius: '10px',
+          padding: '24px',
+          minWidth: '300px',
+          maxWidth: maxWidth,
+          boxShadow: '0 4px 32px rgba(0,0,0,0.3)',
+          position: 'relative',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || showCloseButton) && (
-          <div className="modal-header">
-            {title && <span className="modal-title">{title}</span>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            {title && <span style={{ fontWeight: 'bold', fontSize: '1.2em' }}>{title}</span>}
             {showCloseButton && (
-              <button className="modal-close" onClick={onClose}>×</button>
+              <button style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.5em', cursor: 'pointer' }} onClick={onClose}>×</button>
             )}
           </div>
         )}
-        <div className="modal-body">
-          {/* Fallback message for debugging */}
-          <div style={{ background: 'orange', color: 'black', padding: 10, fontWeight: 'bold', marginBottom: 10 }}>
-            MODAL OPEN (isOpen: true) - If you see this, the modal is rendering.
-          </div>
+        <div>
           {children}
         </div>
       </div>
     </div>,
-    document.body
+    modalRoot
   );
 }
 

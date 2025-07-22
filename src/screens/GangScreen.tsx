@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useGame, useCurrentCity, useCash } from '../contexts/GameContext';
+import { useGame } from '../contexts/GameContext.jsx';
 import { ConfirmModal } from '../components/Modal';
+// @ts-ignore
 import { gameData } from '../game/data/gameData';
 
 interface GangScreenProps {
@@ -8,11 +9,9 @@ interface GangScreenProps {
 }
 
 export default function GangScreen({ onNavigate }: GangScreenProps) {
-  const { state, systems, events, refreshUI } = useGame();
-  const currentCity = useCurrentCity();
-  const cash = useCash();
-  const [recruitCount, setRecruitCount] = useState(1);
-  const [showRecruitConfirm, setShowRecruitConfirm] = useState(false);
+  const { state, updateCash, dispatch } = useGame();
+  const currentCity = state.currentCity;
+  const cash = state.cash;
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferData, setTransferData] = useState({
     fromCity: '',
@@ -21,40 +20,27 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
   });
   
   const gangSize = state.gangSize || 0;
-  const availableGang = state.getAvailableGangMembers();
-  const availableGangInCity = state.getAvailableGangMembersInCity(currentCity);
-  
-  const calculateGangMemberCost = () => {
-    const baseCost = gameData.config.baseGangCost || 10000;
-    const cityData = gameData.cities[currentCity];
-    const cityModifier = cityData?.heatModifier || 1.0;
-    const gangCostScaling = gameData.config.gangCostScaling || 0.1;
-    const gangModifier = 1 + (gangSize * gangCostScaling);
-    
-    const cost = Math.floor(baseCost * cityModifier * gangModifier);
-    return Math.min(cost, 40000); // Cap at 40k
+  // Calculate available gang globally and in city
+  const getAvailableGangMembers = () => {
+    let assignedGang = 0;
+    Object.values(state.bases || {}).forEach((cityBases: any) => {
+      (cityBases as any[]).forEach((base: any) => {
+        assignedGang += base.assignedGang || 0;
+      });
+    });
+    return Math.max(0, state.gangSize - assignedGang);
   };
-  
-  const costPerMember = calculateGangMemberCost();
-  const totalRecruitCost = costPerMember * recruitCount;
-  const maxAffordable = Math.floor(cash / costPerMember);
-  
-  const handleRecruit = () => {
-    if (recruitCount <= 0 || totalRecruitCost > cash) return;
-    
-    state.updateCash(-totalRecruitCost);
-    state.addGangMembers(currentCity, recruitCount);
-    
-    const heatIncrease = recruitCount * gameData.config.gangRecruitHeat;
-    state.updateWarrant(heatIncrease);
-    
-    events.add(`Recruited ${recruitCount} gang members in ${currentCity} for $${totalRecruitCost.toLocaleString()}`, 'good');
-    events.add(`Gang recruitment increased heat by ${heatIncrease.toLocaleString()}`, 'bad');
-    
-    setRecruitCount(1);
-    setShowRecruitConfirm(false);
-    refreshUI();
+  const getAvailableGangMembersInCity = (city: string) => {
+    const totalInCity = (state.gangMembers && state.gangMembers[city]) || 0;
+    let assignedInCity = 0;
+    const cityBases = (state.bases && state.bases[city]) || [];
+    (cityBases as any[]).forEach((base: any) => {
+      assignedInCity += base.assignedGang || 0;
+    });
+    return Math.max(0, totalInCity - assignedInCity);
   };
+  const availableGang = getAvailableGangMembers();
+  const availableGangInCity = getAvailableGangMembersInCity(currentCity);
   
   const calculateTransferCost = (fromCity: string, toCity: string, amount: number) => {
     const baseTransferCost = gameData.config.baseGangCost * 0.3;
@@ -71,20 +57,18 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
   const handleTransfer = () => {
     const { fromCity, toCity, amount } = transferData;
     const transferCost = calculateTransferCost(fromCity, toCity, amount);
-    
-    if (!state.canAfford(transferCost)) {
+    if (transferCost > cash) {
       alert(`Not enough cash. Need $${transferCost.toLocaleString()}`);
       return;
     }
-    
-    state.removeGangMembersFromCity(fromCity, amount);
-    state.addGangMembers(toCity, amount);
-    state.updateCash(-transferCost);
-    
-    events.add(`Transferred ${amount} gang members from ${fromCity} to ${toCity} for $${transferCost.toLocaleString()}`, 'good');
-    
+    // Remove from fromCity
+    const updatedGangMembers = { ...state.gangMembers };
+    updatedGangMembers[fromCity] = Math.max(0, (updatedGangMembers[fromCity] || 0) - amount);
+    // Add to toCity
+    updatedGangMembers[toCity] = (updatedGangMembers[toCity] || 0) + amount;
+    dispatch({ type: 'UPDATE_GANG', gangMembers: updatedGangMembers, gangSize: state.gangSize });
+    updateCash(-transferCost);
     setShowTransferModal(false);
-    refreshUI();
   };
   
   const gangMembers = state.gangMembers || {};
@@ -136,71 +120,6 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
         </div>
       </div>
       
-      {/* Recruitment Section */}
-      <div className="market-item">
-        <div className="market-header">
-          <div className="drug-name">🔫 Recruit Gang Members</div>
-          <div className="drug-price">${costPerMember.toLocaleString()} each</div>
-        </div>
-        <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '15px' }}>
-          Gang members generate heat but enable advanced operations.
-          <span style={{ color: '#ffff00' }}> Cost increases with city heat modifier.</span>
-        </div>
-        
-        <div style={{ background: '#1a1a1a', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
-          <div style={{ fontSize: '14px', color: '#ffff00', marginBottom: '10px', textAlign: 'center' }}>
-            💼 Bulk Recruitment
-          </div>
-          
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto auto',
-            gap: '8px',
-            alignItems: 'center',
-            marginBottom: '10px'
-          }}>
-            <input
-              type="number"
-              value={recruitCount}
-              onChange={(e) => setRecruitCount(Math.max(1, parseInt(e.target.value) || 1))}
-              min="1"
-              max="50"
-              className="quantity-input"
-              placeholder="Members to recruit"
-            />
-            <button
-              className="action-btn"
-              onClick={() => setShowRecruitConfirm(true)}
-              disabled={recruitCount <= 0 || totalRecruitCost > cash}
-            >
-              Recruit
-            </button>
-            <button
-              className="action-btn"
-              style={{ background: '#666', fontSize: '10px', padding: '6px 8px' }}
-              onClick={() => setRecruitCount(Math.min(50, maxAffordable))}
-            >
-              Max
-            </button>
-          </div>
-          
-          <div style={{ fontSize: '12px', color: '#ffff00', textAlign: 'center', minHeight: '40px' }}>
-            {recruitCount > 0 && (
-              <>
-                <div>Total Cost: <span style={{ color: totalRecruitCost > cash ? '#ff6666' : '#ffff00' }}>
-                  ${totalRecruitCost.toLocaleString()}
-                </span></div>
-                <div style={{ marginTop: '5px' }}>
-                  Heat Increase: <span style={{ color: '#ff6666' }}>
-                    +{(recruitCount * gameData.config.gangRecruitHeat).toLocaleString()}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      
       {/* Gang Members by City */}
       {citiesWithGang.length > 0 && (
         <div style={{
@@ -216,7 +135,7 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
             {citiesWithGang.map(city => {
               const totalInCity = gangMembers[city];
-              const availableInCity = state.getAvailableGangMembersInCity(city);
+              const availableInCity = getAvailableGangMembersInCity(city);
               const assignedInCity = totalInCity - availableInCity;
               
               return (
@@ -244,12 +163,12 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
             })}
           </div>
           
-          {citiesWithGang.length > 1 && (
+          {citiesWithGang.length > 0 && (
             <button
               onClick={() => {
                 setTransferData({
                   fromCity: citiesWithGang[0],
-                  toCity: citiesWithGang[1],
+                  toCity: Object.keys(gameData.cities).find(city => city !== citiesWithGang[0]) || citiesWithGang[0],
                   amount: 1
                 });
                 setShowTransferModal(true);
@@ -262,20 +181,6 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
           )}
         </div>
       )}
-      
-      {/* Recruit Confirmation */}
-      <ConfirmModal
-        isOpen={showRecruitConfirm}
-        onConfirm={handleRecruit}
-        onCancel={() => setShowRecruitConfirm(false)}
-        title="Recruit Gang Members"
-        message={`Recruit ${recruitCount} gang members in ${currentCity}?<br><br>
-          <strong>Cost:</strong> $${totalRecruitCost.toLocaleString()}<br>
-          <strong>Cost per member:</strong> $${costPerMember.toLocaleString()}<br>
-          <strong>Heat increase:</strong> +${(recruitCount * gameData.config.gangRecruitHeat).toLocaleString()}<br>
-          <strong>New gang size:</strong> ${gangSize + recruitCount}<br><br>
-          This will increase your daily heat generation.`}
-      />
       
       {/* Transfer Modal */}
       {showTransferModal && (
@@ -305,7 +210,7 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
                   >
                     {citiesWithGang.map(city => (
                       <option key={city} value={city}>
-                        {city} ({state.getAvailableGangMembersInCity(city)} available)
+                        {city} ({getAvailableGangMembersInCity(city)} available)
                       </option>
                     ))}
                   </select>
@@ -342,7 +247,7 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
                     value={transferData.amount}
                     onChange={e => setTransferData({...transferData, amount: Math.max(1, parseInt(e.target.value) || 1)})}
                     min="1"
-                    max={state.getAvailableGangMembersInCity(transferData.fromCity)}
+                    max={getAvailableGangMembersInCity(transferData.fromCity)}
                     style={{
                       width: '100%',
                       background: '#333',
