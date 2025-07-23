@@ -203,68 +203,105 @@ export const gameData = {
     
     // Player ranks
     playerRanks: {
-        1: { 
-            name: 'Street Dealer', 
-            minNetWorth: 0, 
-            minBases: 0, 
+        1: {
+            name: 'Street Dealer',
+            minNetWorth: 0,
+            minBases: 0,
             minGang: 0,
             minAssets: 0,
-            emoji: '👤', 
-            color: '#888888' 
+            minLeveledBases: 0,
+            emoji: '👤',
+            color: '#888888'
         },
-        2: { 
-            name: 'Corner Boss', 
-            minNetWorth: 25000, 
-            minBases: 1, 
+        2: {
+            name: 'Corner Boss',
+            minNetWorth: 25000,
+            minBases: 1,
             minGang: 5,
-            minAssets: 0,
-            emoji: '🔫', 
-            color: '#996633' 
+            minAssets: 10000,
+            minLeveledBases: 0,
+            emoji: '🔫',
+            color: '#996633'
         },
-        3: { 
-            name: 'Block Captain', 
-            minNetWorth: 100000, 
-            minBases: 2, 
+        3: {
+            name: 'Block Captain',
+            minNetWorth: 100000,
+            minBases: 2,
             minGang: 15,
-            minAssets: 0,
-            emoji: '👔', 
-            color: '#6666ff' 
+            minAssets: 25000,
+            minLeveledBases: 0,
+            emoji: '👔',
+            color: '#6666ff'
         },
-        4: { 
-            name: 'District Chief', 
-            minNetWorth: 500000, 
-            minBases: 3, 
+        4: {
+            name: 'District Chief',
+            minNetWorth: 500000,
+            minBases: 3,
             minGang: 30,
-            minAssets: 1,
-            emoji: '🎯', 
-            color: '#9966ff' 
+            minAssets: 50000,
+            minLeveledBases: 1,
+            emoji: '🎯',
+            color: '#9966ff'
         },
-        5: { 
-            name: 'City Kingpin', 
-            minNetWorth: 1000000, 
-            minBases: 5, 
+        5: {
+            name: 'City Kingpin',
+            minNetWorth: 1000000,
+            minBases: 5,
             minGang: 50,
-            minAssets: 3,
-            emoji: '👑', 
-            color: '#ffaa00' 
+            minAssets: 100000,
+            minLeveledBases: 2,
+            emoji: '👑',
+            color: '#ffaa00'
         },
-        6: { 
-            name: 'Drug Lord', 
-            minNetWorth: 5000000, 
-            minBases: 7, 
+        6: {
+            name: 'Drug Lord',
+            minNetWorth: 5000000,
+            minBases: 7,
             minGang: 100,
-            minAssets: 5,
-            emoji: '💎', 
-            color: '#ff6600' 
+            minAssets: 250000,
+            minLeveledBases: 3,
+            emoji: '💎',
+            color: '#ff6600'
         },
-        7: { 
-            name: 'Cartel Boss', 
-            minNetWorth: 10000000, 
-            minBases: 10, 
+        7: {
+            name: 'Cartel Boss',
+            minNetWorth: 10000000,
+            minBases: 10,
             minGang: 200,
-            minAssets: 8,
-            emoji: '🏆', 
-            color: '#ff0066' 
+            minAssets: 500000,
+            minLeveledBases: 4,
+            emoji: '🏆',
+            color: '#ff0066'
+        },
+        8: {
+            name: 'Underworld Emperor',
+            minNetWorth: 25000000,
+            minBases: 12,
+            minGang: 300,
+            minAssets: 1000000,
+            minLeveledBases: 5,
+            emoji: '👑',
+            color: '#00bfff'
+        },
+        9: {
+            name: 'Shadow Syndicate',
+            minNetWorth: 50000000,
+            minBases: 15,
+            minGang: 400,
+            minAssets: 2000000,
+            minLeveledBases: 6,
+            emoji: '🕴️',
+            color: '#8e44ad'
+        },
+        10: {
+            name: 'Global Kingpin',
+            minNetWorth: 100000000,
+            minBases: 20,
+            minGang: 500,
+            minAssets: 5000000,
+            minLeveledBases: 8,
+            emoji: '🌎',
+            color: '#e67e22'
         }
     },
     

@@ -607,6 +607,10 @@ export function GameProvider({ children }) {
   const getWornJewelry = () => {
     return state.assets.wearing.jewelry;
   };
+  /**
+   * Returns a summary of the player's assets.
+   * @returns {{ totalValue: number, flexScore: number }}
+   */
   const getAssetSummary = () => {
     let totalValue = 0;
     let flexScore = 0;
@@ -708,22 +712,34 @@ export function GameProvider({ children }) {
     return Math.max(0.05, Math.min(0.95, base));
   }
   function getDifficultyColor(difficulty) {
-    if (difficulty <= 1) return '#66ff66';
-    if (difficulty === 2) return '#ffff00';
-    return '#ff6666';
+    if (difficulty < 0.3) return '#66ff66'; // Easy - Green
+    if (difficulty < 0.7) return '#ffff00'; // Medium - Yellow
+    return '#ff6666'; // Hard - Red
   }
   function getDifficultyText(difficulty) {
-    if (difficulty <= 1) return 'Easy';
-    if (difficulty === 2) return 'Medium';
+    if (difficulty < 0.3) return 'Easy';
+    if (difficulty < 0.7) return 'Medium';
     return 'Hard';
   }
   function getAllRaidTargets(city) {
-    return raidSystem.enemyBases[city] || [];
+    // Only return targets not on cooldown
+    const allTargets = raidSystem.enemyBases[city] || [];
+    const currentTime = Date.now();
+    const cooldownPeriod = 5 * 60 * 1000;
+    return allTargets.filter(target => (currentTime - target.lastRaid) >= cooldownPeriod);
   }
   function isRaidTargetOnCooldown(target) {
     const currentTime = Date.now();
     const cooldownPeriod = 5 * 60 * 1000;
     return (currentTime - target.lastRaid) < cooldownPeriod;
+  }
+
+  // --- Utility: Raid Activity ---
+  function getCityRaidActivity(city) {
+    if (!state.cityRaidActivity || !state.cityRaidActivity[city]) {
+      return { count: 0, lastRaid: 0 };
+    }
+    return state.cityRaidActivity[city];
   }
 
   // --- Context Value ---
@@ -762,6 +778,7 @@ export function GameProvider({ children }) {
     calculateRaidSuccess,
     getDifficultyColor,
     getDifficultyText,
+    getCityRaidActivity,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

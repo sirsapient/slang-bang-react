@@ -4,6 +4,7 @@ import { useGame } from '../contexts/GameContext.jsx';
 import { gameData } from '../game/data/gameData';
 import type { Base } from '../game/data/gameData-types';
 import { Modal } from '../components/Modal';
+import RaidRiskMeter from '../components/RaidRiskMeter';
 
 interface BasesScreenProps {
   onNavigate: (screen: string) => void;
@@ -15,17 +16,19 @@ function normalizeCityKey(city: string) {
 }
 
 export default function BasesScreen({ onNavigate }: BasesScreenProps) {
-  const { state, updateCash, updateInventory, travelToCity, dispatch, addNotification } = useGame();
+  const { state, updateCash, updateInventory, travelToCity, dispatch, addNotification, getCityRaidActivity } = useGame();
   const currentCity = state.currentCity;
   const cash = state.cash;
   const [selectedBase, setSelectedBase] = useState<string>('');
-  const [assignGang, setAssignGang] = useState<number>(1);
+  const [assignGang, setAssignGang] = useState<number | ''>(1);
   const [showPurchaseModal, setShowPurchaseModal] = useState<boolean>(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
   const [showGangRequirementModal, setShowGangRequirementModal] = useState<boolean>(false);
   const [pendingUpgrade, setPendingUpgrade] = useState<{ baseId: string, nextType: string } | null>(null);
   const [drugModalBaseId, setDrugModalBaseId] = useState<string | null>(null);
-  const [drugTransfer, setDrugTransfer] = useState<{ [drug: string]: number }>({});
+  // Update drugTransfer state type
+  type DrugTransferState = { [drug: string]: number | '' };
+  const [drugTransfer, setDrugTransfer] = useState<DrugTransferState>({});
   const [pendingGangAssign, setPendingGangAssign] = useState<{ baseId: string, value: number } | null>(null);
   const [pendingGunsAssign, setPendingGunsAssign] = useState<{ baseId: string, value: number } | null>(null);
   const [assignGuns, setAssignGuns] = useState<number>(1);
@@ -212,7 +215,8 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const base: Base | undefined = cityBasesArr.find((b: Base) => b.id === baseId);
     if (!base) return;
     const limits = getGangLimits(base.level);
-    const value = Math.max(limits.min, Math.min(limits.max, assignGang));
+    let value = typeof assignGang === 'number' ? assignGang : limits.min;
+    value = Math.max(limits.min, Math.min(limits.max, value));
     setPendingGangAssign({ baseId, value });
   };
 
@@ -533,8 +537,16 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                     <div style={{ fontSize: '11px', color: '#aaa', minWidth: 70 }}>Assign Gang</div>
                     <input
                       type="number"
-                      value={assignGang}
-                      onChange={(e) => setAssignGang(Math.max(getGangLimits(base.level).min, Math.min(getGangLimits(base.level).max, parseInt(e.target.value) || getGangLimits(base.level).min)))}
+                      value={assignGang === '' ? '' : assignGang}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setAssignGang('');
+                        } else {
+                          const num = parseInt(val, 10);
+                          if (!isNaN(num)) setAssignGang(num);
+                        }
+                      }}
                       min={getGangLimits(base.level).min}
                       max={Math.min(getGangLimits(base.level).max, availableGang + (base.assignedGang || 0))}
                       className="quantity-input"
@@ -544,7 +556,12 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                     <button
                       className="action-btn"
                       onClick={() => handleAssignGang(base.id)}
-                      disabled={assignGang < getGangLimits(base.level).min || assignGang > getGangLimits(base.level).max || assignGang > availableGang + (base.assignedGang || 0)}
+                      disabled={
+                        typeof assignGang !== 'number' ||
+                        assignGang < getGangLimits(base.level).min ||
+                        assignGang > getGangLimits(base.level).max ||
+                        assignGang > availableGang + (base.assignedGang || 0)
+                      }
                       style={{ fontSize: '12px', padding: '8px 12px' }}
                     >
                       Assign
@@ -786,16 +803,16 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                           <tr key={d}>
                             <td>{d}</td>
                             <td style={{ textAlign: 'center' }}>{inBase}</td>
-                            <td style={{ textAlign: 'center' }}>{available}</td>
+                            <td style={{ textAlign: 'center' }}>{Number(available).toFixed(2)}</td>
                             <td style={{ textAlign: 'center', display: 'flex', alignItems: 'center', gap: 4 }}>
                               <input
                                 type="number"
-                                value={transfer}
+                                value={transfer === '' ? '' : String(transfer ?? '')}
                                 min={-inBase}
                                 max={maxToBase}
                                 onChange={e => {
-                                  const val = parseInt(e.target.value) || 0;
-                                  setDrugTransfer(prev => ({ ...prev, [d]: val }));
+                                  const val = e.target.value;
+                                  setDrugTransfer(prev => ({ ...prev, [d]: val === '' ? '' : parseInt(val, 10) }));
                                 }}
                                 style={{ width: 60 }}
                               />
@@ -803,7 +820,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                               <button
                                 className="action-btn"
                                 style={{ fontSize: '11px', padding: '2px 8px' }}
-                                onClick={() => setPendingMaxTransfer({ drug: d, direction: 'toBase', max: maxToBase })}
+                                onClick={() => setDrugTransfer(prev => ({ ...prev, [d]: maxToBase }))}
                                 disabled={maxToBase <= 0}
                               >
                                 Max
@@ -1006,80 +1023,6 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                   {cooldownText && <div style={{ color: '#ffaa00', fontSize: '13px', marginBottom: 10 }}>{cooldownText}</div>}
                   <button className="action-btn" style={{ width: '100%' }} onClick={() => setShowCollectInfo(null)}>
                     OK
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-      {pendingMaxTransfer && (() => {
-        const baseId = drugModalBaseId;
-        const allBases: Base[] = Object.values(bases).flatMap((b: Base | Base[]) => b);
-        const modalBase = allBases.find((b: Base) => b.id === baseId);
-        let modalCity = currentCity;
-        for (const [city, basesList] of Object.entries(bases)) {
-          const arr: Base[] = basesList;
-          if (arr.some((b: Base) => b.id === baseId)) {
-            modalCity = city;
-            break;
-          }
-        }
-        const cityBasesArr: Base[] = bases[modalCity];
-        const base = cityBasesArr.find(b => b.id === baseId);
-        if (!base) return null;
-        const d = pendingMaxTransfer!.drug;
-        const max = pendingMaxTransfer!.max;
-        const inBase = base.inventory?.[d] || 0;
-        const available = state.inventory[d] || 0;
-        // In confirm max transfer modal
-        const baseType = baseTypes[String(base.type)];
-        const numDrugs = Object.keys(gameData.drugs).length;
-        const maxPerDrug = Math.floor((baseType.maxInventory || 60) / numDrugs);
-        let move = 0;
-        if (pendingMaxTransfer!.direction === 'toBase') {
-          move = Math.min(max, available, maxPerDrug - inBase);
-        }
-        return (
-          <div className="modal-overlay" onClick={() => setPendingMaxTransfer(null)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
-                <span className="modal-title">Confirm Max Transfer</span>
-                <button className="modal-close" onClick={() => setPendingMaxTransfer(null)}>×</button>
-              </div>
-              <div className="modal-body">
-                <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '16px', marginBottom: '10px' }}>
-                    Are you sure you want to transfer <strong>{move}</strong> {d} to this base?
-                  </div>
-                  <button
-                    className="action-btn"
-                    style={{ width: '100%', marginBottom: 10 }}
-                    onClick={() => {
-                      // Update base and player inventory
-                      if (move > 0) {
-                        const updatedBases = { ...bases };
-                        updatedBases[modalCity] = cityBasesArr.map((b: Base) =>
-                          b.id === base.id
-                            ? { ...b, inventory: { ...b.inventory, [d]: (b.inventory?.[d] || 0) + move } }
-                            : b
-                        );
-                        const newPlayerInventory = { ...state.inventory, [d]: (state.inventory[d] || 0) - move };
-                        dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
-                        dispatch({ type: 'UPDATE_INVENTORY', drug: '__bulk', amount: 0, newInventory: newPlayerInventory });
-                        addNotification(`Transferred ${move} ${d} to base.`, 'success');
-                      }
-                      setPendingMaxTransfer(null);
-                    }}
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    className="action-btn"
-                    style={{ background: '#ff6666', width: '100%' }}
-                    onClick={() => setPendingMaxTransfer(null)}
-                  >
-                    Cancel
                   </button>
                 </div>
               </div>

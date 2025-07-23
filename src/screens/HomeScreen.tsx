@@ -15,10 +15,11 @@ interface PendingPurchase {
 }
 
 export default function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { state, resetGame, updateCash, updateInventory, addNotification, dispatch } = useGame();
+  const { state, resetGame, updateCash, updateInventory, addNotification, dispatch, getAssetSummary } = useGame();
   // Remove systems and events, use only state and gameState
   const cash = state.cash ?? 0;
   const currentCity = state.currentCity || 'Unknown';
+  const assetSummary = getAssetSummary();
   // Calculate net worth: cash + inventory value (using current city prices if available)
   const getNetWorth = () => {
     let total = state.cash || 0;
@@ -28,6 +29,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       const price = prices[drug] || 0;
       total += qty * price;
     }
+    total += assetSummary.totalValue || 0;
     return total;
   };
   const netWorth = getNetWorth();
@@ -49,18 +51,33 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const heatLevel = state.heatLevel ?? 0;
   const heatWarning = heatLevel > 80 ? 'Heat is very high!' : undefined;
 
+  // Calculate number of leveled up bases (level > 1)
+  const getLeveledBases = () => {
+    let count = 0;
+    Object.values(state.bases || {}).forEach((cityBases: any) => {
+      (cityBases as any[]).forEach((base: any) => {
+        if (base.level && base.level > 1) count++;
+      });
+    });
+    return count;
+  };
+  const leveledBases = getLeveledBases();
+
   // Calculate current player rank
   const getCurrentRank = () => {
     const basesOwned = Object.keys(state.bases || {}).length;
     const gangSize = state.gangSize || 0;
-    const assetCount = 0; // No systems.assets in minimal context
+    const assetValue = assetSummary.totalValue || 0;
     let currentRank = 1;
-    for (let rankId = 7; rankId >= 1; rankId--) {
+    for (let rankId = 10; rankId >= 1; rankId--) {
       const rank = gameData.playerRanks[rankId];
-      if (netWorth >= rank.minNetWorth && 
-          basesOwned >= rank.minBases && 
-          gangSize >= rank.minGang &&
-          assetCount >= (rank.minAssets || 0)) {
+      if (
+        netWorth >= rank.minNetWorth &&
+        basesOwned >= rank.minBases &&
+        gangSize >= rank.minGang &&
+        assetValue >= (rank.minAssets || 0) &&
+        leveledBases >= (rank.minLeveledBases || 0)
+      ) {
         currentRank = rankId;
         break;
       }
@@ -319,9 +336,45 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   function renderRankingContent() {
     const currentRankId = getCurrentRank();
     const currentRank = gameData.playerRanks[currentRankId];
-    const nextRank = currentRankId < 7 ? gameData.playerRanks[currentRankId + 1] : null;
+    const nextRank = currentRankId < 10 ? gameData.playerRanks[currentRankId + 1] : null;
+    // Calculate Empire Value breakdown
+    const baseValue = (() => {
+      let total = 0;
+      Object.values(state.bases || {}).forEach((cityBases: any) => {
+        (cityBases as any[]).forEach((base: any) => {
+          // Use cost from gameData.baseTypes if possible
+          const baseType = gameData.baseTypes[base.type] || {};
+          total += baseType.cost || 0;
+        });
+      });
+      return total;
+    })();
+    const gangValue = (state.gangSize || 0) * (gameData.config.baseGangCost || 10000);
+    const gunValue = (state.guns || 0) * (gameData.config.gunCost || 5000);
+    const drugValue = (() => {
+      let total = 0;
+      const prices = (gameData.cities[currentCity] && gameData.cities[currentCity].prices) || {};
+      for (const drug in state.inventory) {
+        const qty = state.inventory[drug] || 0;
+        const price = prices[drug] || 0;
+        total += qty * price;
+      }
+      return total;
+    })();
+    const empireValue = cash + assetSummary.totalValue + baseValue + gangValue + gunValue + drugValue;
     return (
       <div style={{ textAlign: 'center', padding: '20px' }}>
+        <div style={{ fontSize: '32px', marginBottom: '10px', color: '#ffcc00' }}>
+          🏆 Empire Value: ${empireValue.toLocaleString()}
+        </div>
+        <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '20px' }}>
+          <div>💵 Cash: ${cash.toLocaleString()}</div>
+          <div>💎 Asset Value: ${assetSummary.totalValue.toLocaleString()}</div>
+          <div>🏢 Base Value: ${baseValue.toLocaleString()}</div>
+          <div>👥 Gang Value: ${gangValue.toLocaleString()}</div>
+          <div>🔫 Gun Value: ${gunValue.toLocaleString()}</div>
+          <div>🎒 Drug Inventory: ${drugValue.toLocaleString()}</div>
+        </div>
         <div style={{ fontSize: '48px', marginBottom: '10px' }}>
           {currentRank.emoji}
         </div>
@@ -333,7 +386,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           {currentRank.name}
         </div>
         <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '20px' }}>
-          Rank {currentRankId} of 7
+          Rank {currentRankId} of 10
         </div>
         <div style={{
           background: '#222',
@@ -346,7 +399,10 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           </div>
           <div style={{ textAlign: 'left', fontSize: '12px' }}>
             💰 Net Worth: ${netWorth.toLocaleString()}<br/>
+            💵 Cash: ${cash.toLocaleString()}<br/>
+            💎 Asset Value: ${assetSummary.totalValue.toLocaleString()}<br/>
             🏢 Bases: {Object.keys(state.bases || {}).length}<br/>
+            🏢 Leveled Bases: {leveledBases}<br/>
             👥 Gang: {state.gangSize || 0}<br/>
             🔫 Guns: {state.guns || 0}
           </div>
@@ -363,8 +419,11 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             <div style={{ textAlign: 'left', fontSize: '11px', color: '#aaa' }}>
               Need:<br/>
               💰 ${nextRank.minNetWorth.toLocaleString()} net worth<br/>
+              💎 ${typeof nextRank.minAssets === 'number' ? nextRank.minAssets.toLocaleString() : 0} asset value<br/>
               🏢 {nextRank.minBases} bases<br/>
-              👥 {nextRank.minGang} gang members
+              🏢 {nextRank.minLeveledBases || 0} leveled bases<br/>
+              👥 {nextRank.minGang} gang members<br/>
+              🔫 {nextRank.minGuns || 0} guns
             </div>
           </div>
         )}

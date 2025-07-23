@@ -16,7 +16,7 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
   const [transferData, setTransferData] = useState({
     fromCity: '',
     toCity: '',
-    amount: 1
+    amount: 1 as number | ''
   });
   
   const gangSize = state.gangSize || 0;
@@ -56,16 +56,17 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
   
   const handleTransfer = () => {
     const { fromCity, toCity, amount } = transferData;
-    const transferCost = calculateTransferCost(fromCity, toCity, amount);
+    const safeAmount = typeof amount === 'number' && amount > 0 ? amount : 1;
+    const transferCost = calculateTransferCost(fromCity, toCity, safeAmount);
     if (transferCost > cash) {
       alert(`Not enough cash. Need $${transferCost.toLocaleString()}`);
       return;
     }
     // Remove from fromCity
     const updatedGangMembers = { ...state.gangMembers };
-    updatedGangMembers[fromCity] = Math.max(0, (updatedGangMembers[fromCity] || 0) - amount);
+    updatedGangMembers[fromCity] = Math.max(0, (updatedGangMembers[fromCity] || 0) - safeAmount);
     // Add to toCity
-    updatedGangMembers[toCity] = (updatedGangMembers[toCity] || 0) + amount;
+    updatedGangMembers[toCity] = (updatedGangMembers[toCity] || 0) + safeAmount;
     dispatch({ type: 'UPDATE_GANG', gangMembers: updatedGangMembers, gangSize: state.gangSize });
     updateCash(-transferCost);
     setShowTransferModal(false);
@@ -244,8 +245,14 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
                   </label>
                   <input
                     type="number"
-                    value={transferData.amount}
-                    onChange={e => setTransferData({...transferData, amount: Math.max(1, parseInt(e.target.value) || 1)})}
+                    value={transferData.amount === '' ? '' : transferData.amount}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setTransferData({
+                        ...transferData,
+                        amount: val === '' ? '' : parseInt(val, 10)
+                      });
+                    }}
                     min="1"
                     max={getAvailableGangMembersInCity(transferData.fromCity)}
                     style={{
@@ -259,7 +266,7 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
                   />
                 </div>
                 
-                {transferData.fromCity && transferData.toCity && transferData.amount > 0 && (
+                {transferData.fromCity && transferData.toCity && typeof transferData.amount === 'number' && transferData.amount > 0 && (
                   <div style={{
                     background: '#1a1a1a',
                     padding: '10px',
@@ -277,7 +284,11 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
                   onClick={handleTransfer}
                   className="action-btn"
                   style={{ width: '100%' }}
-                  disabled={transferData.fromCity === transferData.toCity || transferData.amount <= 0}
+                  disabled={
+                    transferData.fromCity === transferData.toCity ||
+                    typeof transferData.amount !== 'number' ||
+                    transferData.amount <= 0
+                  }
                 >
                   Transfer
       </button>

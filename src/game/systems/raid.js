@@ -4,14 +4,17 @@ export class RaidSystem {
         this.state = state;
         this.events = events;
         this.data = data;
-        // Persist enemyBases for the session
+        // Persist enemyBases for the session and across reloads
         if (typeof window !== 'undefined') {
-            if (!window.enemyBases) {
-                window.enemyBases = this.generateEnemyBases();
+            const savedBases = localStorage.getItem('enemyBases');
+            if (savedBases) {
+                this.enemyBases = JSON.parse(savedBases);
+            } else {
+                this.enemyBases = this.generateEnemyBases();
+                localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
             }
-            this.enemyBases = window.enemyBases;
         } else {
-        this.enemyBases = this.generateEnemyBases();
+            this.enemyBases = this.generateEnemyBases();
         }
     }
     
@@ -207,6 +210,10 @@ export class RaidSystem {
             
             // Update last raid timestamp
             target.lastRaid = Date.now();
+            // Persist enemyBases to localStorage after raid
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
+            }
 
             // Increment city raid activity for base attack probability
             if (this.state.incrementCityRaidActivity) {
@@ -245,6 +252,10 @@ export class RaidSystem {
             
             // Update last raid timestamp (even for failed raids)
             target.lastRaid = Date.now();
+            // Persist enemyBases to localStorage after raid
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
+            }
 
             // Increment city raid activity for base attack probability
             if (this.state.incrementCityRaidActivity) {
