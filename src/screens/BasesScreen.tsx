@@ -16,7 +16,7 @@ function normalizeCityKey(city: string) {
 }
 
 export default function BasesScreen({ onNavigate }: BasesScreenProps) {
-  const { state, updateCash, updateInventory, travelToCity, dispatch, addNotification, getCityRaidActivity } = useGame();
+  const { state, updateCash, updateInventory, travelToCity, dispatch, addNotification, getCityRaidActivity, getAvailableGunsInCity } = useGame();
   const currentCity = state.currentCity;
   const cash = state.cash;
   const [selectedBase, setSelectedBase] = useState<string>('');
@@ -27,7 +27,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
   const [pendingUpgrade, setPendingUpgrade] = useState<{ baseId: string, nextType: string } | null>(null);
   const [drugModalBaseId, setDrugModalBaseId] = useState<string | null>(null);
   // Update drugTransfer state type
-  type DrugTransferState = { [drug: string]: number | '' };
+  type DrugTransferState = { [drug: string]: number };
   const [drugTransfer, setDrugTransfer] = useState<DrugTransferState>({});
   const [pendingGangAssign, setPendingGangAssign] = useState<{ baseId: string, value: number } | null>(null);
   const [pendingGunsAssign, setPendingGunsAssign] = useState<{ baseId: string, value: number } | null>(null);
@@ -74,7 +74,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       } else if (baseList) {
         arr = [baseList];
       }
-      result[normalizeCityKey(city)] = arr.filter(isBase);
+      result[normalizeCityKey(city)] = arr.filter(isBase) as Base[];
     });
     return result;
   }, [state.bases]);
@@ -91,12 +91,14 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     return Math.max(0, totalInCity - assignedInCity);
   };
   const availableGang = getAvailableGangMembersInCity(currentCity);
+  // Add available guns in city
+  const availableGuns = getAvailableGunsInCity(currentCity);
   const cityBases: Base[] = (() => {
     const arr = bases[normalizeCityKey(currentCity)];
     if (!arr) return [];
     // If arr is nested, flatten it
     const flatArr = Array.isArray(arr[0]) ? arr.flat() : arr;
-    return flatArr.filter(isBase);
+    return flatArr.filter(isBase) as Base[];
   })();
   console.log('[DEBUG] bases:', bases);
   console.log('[DEBUG] basesByCity:', basesByCity);
@@ -309,19 +311,18 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const cityBasesArr: Base[] = bases[modalCity];
     const base: Base | undefined = cityBasesArr.find((b: Base) => b.id === baseId);
     if (!base) return;
-    const now = Date.now();
-    const timeSinceLastCollect = now - (base.lastCollected || now);
-    const hoursSinceLastCollect = timeSinceLastCollect / (1000 * 60 * 60);
-    if (hoursSinceLastCollect < 1) {
-      alert('Income can only be collected once per hour');
+    
+    // Use the new base management system
+    const result = (window as any).game?.baseManagement?.collectBaseIncome(baseId);
+    if (result && !result.success) {
+      alert(result.error);
       return;
     }
-    const income = base.income * (base.assignedGang || 0);
-    updateCash(income);
-    addNotification(`💰 Collected $${income.toLocaleString()} from your base in ${modalCity}.`, 'success');
+    
+    // Update the base's lastCollected time
     const updatedBases = { ...bases };
     updatedBases[modalCity] = cityBasesArr.map((b: Base) =>
-      b.id === baseId ? { ...b, lastCollected: now } : b
+      b.id === baseId ? { ...b, lastCollected: Date.now() } : b
     );
     dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
   };
@@ -378,7 +379,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
         padding: '15px',
         marginBottom: '20px'
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', textAlign: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', textAlign: 'center' }}>
           <div>
             <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
               🏢 Bases
@@ -389,12 +390,37 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
           </div>
           <div>
             <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
-              💰 Available Income
+              🔫 Available Guns
             </div>
-            <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
-              ${totalIncome.toLocaleString()}
+            <div style={{ fontSize: '18px', color: '#66ccff', fontWeight: 'bold' }}>
+              {availableGuns}
             </div>
           </div>
+          <div>
+            <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
+              👥 Available Gangs
+            </div>
+            <div style={{ fontSize: '18px', color: '#ffcc66', fontWeight: 'bold' }}>
+              {availableGang}
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Available Income Box */}
+      <div style={{
+        background: '#222',
+        border: '2px solid #66ff66',
+        borderRadius: '12px',
+        padding: '22px 0',
+        marginBottom: '24px',
+        textAlign: 'center',
+        boxShadow: '0 2px 12px rgba(102,255,102,0.08)'
+      }}>
+        <div style={{ fontSize: '15px', color: '#aaa', marginBottom: '8px', letterSpacing: 1 }}>
+          💰 Available Income
+        </div>
+        <div style={{ fontSize: '2.2rem', color: '#66ff66', fontWeight: 900, letterSpacing: 1 }}>
+          ${totalIncome.toLocaleString()}
         </div>
       </div>
       
@@ -807,12 +833,12 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                             <td style={{ textAlign: 'center', display: 'flex', alignItems: 'center', gap: 4 }}>
                               <input
                                 type="number"
-                                value={transfer === '' ? '' : String(transfer ?? '')}
+                                value={transfer === 0 ? '' : String(transfer ?? '')}
                                 min={-inBase}
                                 max={maxToBase}
                                 onChange={e => {
                                   const val = e.target.value;
-                                  setDrugTransfer(prev => ({ ...prev, [d]: val === '' ? '' : parseInt(val, 10) }));
+                                  setDrugTransfer(prev => ({ ...prev, [d]: val === '' ? 0 : parseInt(val, 10) || 0 }));
                                 }}
                                 style={{ width: 60 }}
                               />
@@ -901,7 +927,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
 
       {showConfirmTransferModal && pendingTransfer && (() => {
         const baseId = pendingTransfer.base.id;
-        const allBases: Base[] = Object.values(bases).flatMap((b: Base | Base[]) => b);
+        const allBases: Base[] = Object.values(bases).flatMap((b: Base[]) => b);
         const modalBase = allBases.find((b: Base) => b.id === baseId);
         let modalCity = currentCity;
         for (const [city, basesList] of Object.entries(bases)) {
