@@ -13,6 +13,7 @@ import RaidScreen from './screens/RaidScreen';
 import MailScreen from './screens/MailScreen';
 import './App.css';
 import { Modal } from './components/Modal';
+import { useTutorial } from './contexts/TutorialContext';
 
 function GameContent() {
   const { state, sellAllDrugs } = useGame();
@@ -147,6 +148,12 @@ function GameContent() {
 }
 
 function App() {
+  const { progress, startTutorial } = useTutorial();
+  React.useEffect(() => {
+    if (!progress.gettingStarted) {
+      startTutorial('gettingStarted');
+    }
+  }, [progress.gettingStarted, startTutorial]);
   return <GameContent />;
 }
 
