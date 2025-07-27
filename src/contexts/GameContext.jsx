@@ -749,6 +749,12 @@ export function GameProvider({ children }) {
     return state.cityRaidActivity[city];
   }
 
+  // --- Utility: Base Check ---
+  function hasBaseInCity(city) {
+    const cityBases = state.bases[city];
+    return cityBases && Array.isArray(cityBases) && cityBases.length > 0;
+  }
+
   // --- Context Value ---
   const value = {
     state,
@@ -786,6 +792,7 @@ export function GameProvider({ children }) {
     getDifficultyColor,
     getDifficultyText,
     getCityRaidActivity,
+    hasBaseInCity,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

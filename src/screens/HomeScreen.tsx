@@ -16,7 +16,7 @@ interface PendingPurchase {
 }
 
 export default function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { state, resetGame, updateCash, updateInventory, addNotification, dispatch, getAssetSummary } = useGame();
+  const { state, resetGame, updateCash, updateInventory, addNotification, dispatch, getAssetSummary, hasBaseInCity } = useGame();
   const { resetTutorial, nextStep, activeTutorial, stepIndex, tutorialSteps, startTutorial, skipTutorial, progress } = useTutorial();
   // Remove systems and events, use only state and gameState
   const cash = state.cash ?? 0;
@@ -101,14 +101,13 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       name: 'Raid Bases', 
       onClick: () => {
         // Check if player has a base in current city
-        const hasBaseInCity = state.getBase(currentCity);
-        if (!hasBaseInCity) {
+        if (!hasBaseInCity(currentCity)) {
           alert(`You need to establish a base in ${currentCity} before you can raid here. Build a base first to unlock raiding in this city.`);
           return;
         }
         onNavigate('raid');
       },
-      disabled: !state.getBase(currentCity),
+      disabled: !hasBaseInCity(currentCity),
       disabledMessage: `Requires base in ${currentCity}`
     },
     { 
