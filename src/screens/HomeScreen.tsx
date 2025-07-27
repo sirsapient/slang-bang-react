@@ -183,65 +183,6 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       {/* Cash and Stats */}
       <PlayerCard />
       
-      {/* Debug Tutorial Button */}
-      {!activeTutorial && (
-        <div style={{ 
-          background: '#333', 
-          border: '1px solid #666', 
-          borderRadius: '10px', 
-          padding: '10px', 
-          marginBottom: '10px',
-          textAlign: 'center'
-        }}>
-          <button 
-            onClick={() => {
-              console.log('Reset and Activate Assets Tutorial button clicked');
-              console.log('Before reset - progress:', progress);
-              resetTutorial('assetsTutorial');
-              // Start the tutorial immediately after resetting
-              setTimeout(() => {
-                console.log('Starting assets tutorial after reset');
-                startTutorial('assetsTutorial');
-              }, 100);
-              alert('Assets Tutorial Reset and Activated!');
-            }}
-            style={{ 
-              background: '#ff8800', 
-              color: '#fff', 
-              border: 'none', 
-              padding: '8px 16px', 
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              marginRight: '10px'
-            }}
-          >
-            🔄 Reset & Activate Assets Tutorial ({progress.assetsTutorial ? 'Completed' : 'Not Completed'})
-          </button>
-          <button 
-            onClick={() => {
-              // Test skip all tutorials functionality
-              console.log('Testing skip all tutorials');
-              skipTutorial();
-            }}
-            style={{ 
-              background: '#ff6600', 
-              color: '#fff', 
-              border: 'none', 
-              padding: '8px 16px', 
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              marginRight: '10px'
-            }}
-          >
-            🚫 Test Skip All Tutorials
-          </button>
-
-
-        </div>
-      )}
-      
       {/* Heat Warning */}
       {heatWarning && (
         <div className="warrant-card">
