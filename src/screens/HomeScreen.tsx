@@ -95,7 +95,22 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     { id: 'quickBuy', icon: '🛒', name: 'Quick Buy', onClick: () => setShowQuickBuyModal(true) },
     { id: 'bases', icon: '🏢', name: 'Manage Bases', onClick: () => onNavigate('bases') },
     { id: 'gang', icon: '👥', name: 'Manage Gang', onClick: () => onNavigate('gang') },
-    { id: 'raid', icon: '⚔️', name: 'Raid Bases', onClick: () => onNavigate('raid') },
+    { 
+      id: 'raid', 
+      icon: '⚔️', 
+      name: 'Raid Bases', 
+      onClick: () => {
+        // Check if player has a base in current city
+        const hasBaseInCity = state.getBase(currentCity);
+        if (!hasBaseInCity) {
+          alert(`You need to establish a base in ${currentCity} before you can raid here. Build a base first to unlock raiding in this city.`);
+          return;
+        }
+        onNavigate('raid');
+      },
+      disabled: !state.getBase(currentCity),
+      disabledMessage: `Requires base in ${currentCity}`
+    },
     { 
       id: 'market', 
       icon: '💊', 
@@ -204,16 +219,40 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       {/* App Grid */}
       <div className="app-grid">
         {appsWithSettings.map(app => {
+          const isDisabled = app.disabled;
           return (
             <button
               key={app.id}
               id={app.elementId || app.id}
-              className="app-icon"
-              onClick={app.onClick}
-              style={{ minWidth: 80 }}
+              className={`app-icon${isDisabled ? ' disabled' : ''}`}
+              onClick={isDisabled ? undefined : app.onClick}
+              style={{ 
+                minWidth: 80,
+                opacity: isDisabled ? 0.5 : 1,
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                position: 'relative'
+              }}
+              title={isDisabled ? app.disabledMessage : undefined}
             >
               <div style={{ fontSize: 32 }}>{app.icon}</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>{app.name}</div>
+              {isDisabled && (
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'rgba(0,0,0,0.8)',
+                  color: '#fff',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  whiteSpace: 'nowrap',
+                  zIndex: 10
+                }}>
+                  🔒 Locked
+                </div>
+              )}
             </button>
           );
         })}

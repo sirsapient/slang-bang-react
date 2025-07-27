@@ -139,6 +139,10 @@ const tutorialSteps = {
       message: "You're about to attempt your first raid!",
     },
     {
+      id: 'raid-requirement',
+      message: "Remember: You can only raid in cities where you have established a base. This ensures you have a local presence and resources to conduct operations.",
+    },
+    {
       id: 'raid-gang',
       message: "Choose how many gang members and guns to send. More means higher success, but also higher risk.",
     },
