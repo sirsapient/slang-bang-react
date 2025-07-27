@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGame } from '../contexts/GameContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext.jsx';
 import { Modal } from '../components/Modal';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
@@ -13,6 +14,7 @@ type Drug = 'Fentanyl' | 'Oxycontin' | 'Heroin' | 'Cocaine' | 'Weed' | 'Meth';
 
 const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
   const { state, buyDrug, sellDrug, sellAllDrugs } = useGame();
+  const { nextStep, activeTutorial, stepIndex, tutorialSteps } = useTutorial();
   const currentCity = state.currentCity || 'Unknown';
   const inventory = state.inventory;
   const cash = state.cash;
@@ -37,6 +39,28 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
   const prices = state.cityPrices?.[currentCity] || {};
   const supply = state.citySupply?.[currentCity] || {};
 
+  // Handle tutorial steps
+  useEffect(() => {
+    if (activeTutorial === 'gettingStarted' && stepIndex === 11) {
+      const step = tutorialSteps[activeTutorial][stepIndex];
+      if (step && step.id === 'sell-weed-instruction') {
+        console.log('Tutorial: Showing sell instruction modal');
+        // The tutorial overlay will show the instruction
+      }
+    }
+  }, [activeTutorial, stepIndex, tutorialSteps]);
+
+  // Handle tutorial completion after selling
+  useEffect(() => {
+    if (activeTutorial === 'gettingStarted' && stepIndex === 12) {
+      const step = tutorialSteps[activeTutorial][stepIndex];
+      if (step && step.id === 'congratulations') {
+        console.log('Tutorial: Showing congratulations modal');
+        // The tutorial overlay will show the congratulations message
+      }
+    }
+  }, [activeTutorial, stepIndex, tutorialSteps]);
+
   // TODO: Price generation should be handled in context or on app start
 
   const handleBuy = (drug: string) => {
@@ -55,6 +79,15 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
     if (!selectedDrug) return;
     const amount = confirmAmount;
     if (amount <= 0) return setShowBuyModal(false);
+    
+    // Check if this is a tutorial click for Weed purchase
+    if (activeTutorial === 'gettingStarted' && stepIndex === 6 && selectedDrug === 'Weed' && amount === 2) {
+      const step = tutorialSteps[activeTutorial][stepIndex];
+      if (step && step.requireClick) {
+        nextStep();
+      }
+    }
+    
     // Use context action
     buyDrug(selectedDrug, amount, prices[selectedDrug!] || 0);
     setShowBuyModal(false);
@@ -108,6 +141,16 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
     setSellAllSummary({ total: result.totalEarned, drugs: result.drugsSold });
     setShowSellAllModal(false);
     forceUpdate(x => x + 1);
+    
+    // Check if this is a tutorial sell all
+    if (activeTutorial === 'gettingStarted' && stepIndex === 11) {
+      const step = tutorialSteps[activeTutorial][stepIndex];
+      if (step && step.id === 'sell-weed-instruction') {
+        console.log('Tutorial: Weed sold, advancing to congratulations');
+        nextStep();
+      }
+    }
+    
     // Optionally, show a toast or summary here
   };
 
@@ -146,14 +189,18 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
             <div>Supply</div>
           </div>
           {Object.entries(prices).map(([drug, price]) => (
-            <div key={drug} style={{
-              borderBottom: '1px solid #444',
-              padding: '16px 10px',
-              minHeight: 80,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-            }}>
+            <div 
+              key={drug} 
+              id={drug === 'Weed' ? 'weed-purchase-section' : `${drug.toLowerCase()}-purchase-section`}
+              style={{
+                borderBottom: '1px solid #444',
+                padding: '16px 10px',
+                minHeight: 80,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+              }}
+            >
               {/* First line: Drug info */}
               <div style={{
                 display: 'grid',
@@ -178,6 +225,7 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
                 {/* Buy controls */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
                   <input
+                    id={drug === 'Weed' ? 'weed-entry' : `${drug.toLowerCase()}-entry`}
                     type="number"
                     value={buyQuantities[drug as Drug] || ''}
                     onChange={e => handleBuyQuantityChange(drug, e.target.value)}

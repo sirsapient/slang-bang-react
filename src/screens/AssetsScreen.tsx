@@ -1,6 +1,7 @@
 // src/screens/AssetsScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { useGame, useCash, useCurrentCity } from '../contexts/GameContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext.jsx';
 import { Modal } from '../components/Modal';
 import { gameData } from '../game/data/gameData';
 import type { Asset, AssetInstance } from '../game/data/gameData-types';
@@ -13,8 +14,13 @@ type TabType = 'exclusive' | 'jewelry' | 'cars' | 'property' | 'owned';
 
 export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
   const { state, buyAsset, sellAsset, wearJewelry, removeJewelry, getOwnedAssets, getAllOwnedInstances, getWornJewelry, getAssetSummary } = useGame();
+  const { activeTutorial, stepIndex, tutorialSteps, nextStep, progress, startTutorial, setStepIndex, hasSeenFirstAssetsModal } = useTutorial();
   const cash = useCash();
   const currentCity = useCurrentCity();
+  
+  // Check if we should start the jewelry tutorial
+  // Only start if the user has completed the first assets tutorial but hasn't completed the jewelry tutorial
+  const shouldStartJewelryTutorial = progress.assetsTutorial && !progress.assetsJewelryTutorial && activeTutorial === null;
   const [activeTab, setActiveTab] = useState<TabType>('exclusive');
   const [showPurchaseConfirm, setShowPurchaseConfirm] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
@@ -40,6 +46,37 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
     if (!activeTab) setActiveTab('owned');
   }, [activeTab]);
 
+
+
+
+
+  // Start jewelry tutorial when user visits assets page after completing first assets tutorial
+  useEffect(() => {
+    console.log('shouldStartJewelryTutorial:', shouldStartJewelryTutorial);
+    console.log('Tutorial state:', { 
+      progressAssetsTutorial: progress.assetsTutorial, 
+      progressAssetsJewelryTutorial: progress.assetsJewelryTutorial, 
+      activeTutorial 
+    });
+    if (shouldStartJewelryTutorial) {
+      console.log('Starting jewelry tutorial');
+      // Small delay to ensure the screen has loaded
+      const timer = setTimeout(() => {
+        console.log('Starting tutorial with delay');
+        startTutorial('assetsJewelryTutorial');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldStartJewelryTutorial, startTutorial, progress.assetsTutorial, progress.assetsJewelryTutorial, activeTutorial]);
+
+  // Auto-switch to jewelry tab when jewelry tutorial is active
+  useEffect(() => {
+    if (activeTutorial === 'assetsJewelryTutorial') {
+      console.log('Jewelry tutorial active, switching to jewelry tab');
+      setActiveTab('jewelry');
+    }
+  }, [activeTutorial]);
+
   const summary = getAssetSummary();
 
   const getAvailableTabCount = () => 5;
@@ -47,14 +84,26 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
   const handlePurchaseAsset = (assetId: string) => {
     const asset = (gameData.assets || []).find((a: any) => a.id === assetId);
     if (!asset) return;
+    console.log('Purchase asset clicked:', asset.name, 'Asset ID:', assetId);
+    console.log('Tutorial state during purchase click:', { activeTutorial, stepIndex });
     setPendingPurchase(asset);
     setShowConfirmModal(true);
   };
   const confirmPurchase = () => {
     if (pendingPurchase) {
+      console.log('Confirming purchase:', pendingPurchase.name, 'Type:', pendingPurchase.type);
+      console.log('Tutorial state:', { activeTutorial, stepIndex });
       const result = buyAsset(pendingPurchase.id);
       if (!result.success && result.error) {
         alert(result.error);
+      } else if (result.success && pendingPurchase.type === 'jewelry') {
+        // Check if this is the jewelry tutorial and we're on the buy-jewelry step
+        if (activeTutorial === 'assetsJewelryTutorial' && stepIndex === 1) {
+          console.log('Advancing tutorial from jewelry purchase');
+          nextStep();
+        } else {
+          console.log('Not advancing tutorial - conditions not met');
+        }
       }
     }
     setShowConfirmModal(false);
@@ -88,6 +137,18 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
 
   const handleWearJewelry = (instanceId: string) => {
     wearJewelry(instanceId);
+    // Check if this is a tutorial click for wear jewelry button
+    if (activeTutorial === 'assetsTutorial' && stepIndex === 5) {
+      const step = tutorialSteps[activeTutorial][stepIndex];
+      if (step && step.requireClick) {
+        nextStep();
+      }
+    }
+    // Check if this is the jewelry tutorial wear step
+    if (activeTutorial === 'assetsJewelryTutorial' && stepIndex === 2) {
+      console.log('Advancing jewelry tutorial from wear jewelry click');
+      nextStep();
+    }
   };
 
   const handleRemoveJewelry = (instanceId: string) => {
@@ -126,6 +187,95 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
         </button>
         <h3>💎 Asset Store</h3>
         <div style={{ fontSize: '12px', color: '#aaa' }}>Build Your Empire</div>
+        {/* Debug buttons for testing */}
+        <button 
+          onClick={() => {
+            console.log('Manual jewelry tutorial start');
+            startTutorial('assetsJewelryTutorial');
+          }}
+          style={{ 
+            position: 'absolute', 
+            right: '10px', 
+            top: '10px', 
+            background: '#ffaa00', 
+            color: '#222', 
+            fontSize: '10px',
+            padding: '4px 8px'
+          }}
+        >
+          Debug: Start Jewelry Tutorial
+        </button>
+        <button 
+          onClick={() => {
+            console.log('Reset jewelry tutorial progress');
+            // Reset the jewelry tutorial progress
+            localStorage.setItem('tutorialProgress', JSON.stringify({
+              gettingStarted: true,
+              assetsTutorial: true,
+              assetsJewelryTutorial: false,
+              firstBase: false,
+              firstRaid: false
+            }));
+            window.location.reload();
+          }}
+          style={{ 
+            position: 'absolute', 
+            right: '10px', 
+            top: '30px', 
+            background: '#ff6666', 
+            color: '#fff', 
+            fontSize: '10px',
+            padding: '4px 8px'
+          }}
+        >
+          Debug: Reset Jewelry Tutorial
+        </button>
+        <button 
+          onClick={() => {
+            console.log('Manual advance jewelry tutorial');
+            if (activeTutorial === 'assetsJewelryTutorial') {
+              nextStep();
+            }
+          }}
+          style={{ 
+            position: 'absolute', 
+            right: '10px', 
+            top: '50px', 
+            background: '#66ff66', 
+            color: '#222', 
+            fontSize: '10px',
+            padding: '4px 8px'
+          }}
+        >
+          Debug: Advance Tutorial
+        </button>
+        <button 
+          onClick={() => {
+            console.log('Force jewelry tab active');
+            setActiveTab('jewelry');
+            // Check for silver chain button after a delay
+            setTimeout(() => {
+              const silverChainButton = document.getElementById('silver-chain-purchase');
+              console.log('Silver chain button after forcing jewelry tab:', silverChainButton);
+              if (silverChainButton) {
+                console.log('Silver chain button found!');
+                silverChainButton.style.border = '3px solid #ffaa00';
+                silverChainButton.style.boxShadow = '0 0 10px rgba(255, 170, 0, 0.5)';
+              }
+            }, 100);
+          }}
+          style={{ 
+            position: 'absolute', 
+            right: '10px', 
+            top: '70px', 
+            background: '#ffaa00', 
+            color: '#222', 
+            fontSize: '10px',
+            padding: '4px 8px'
+          }}
+        >
+          Debug: Force Jewelry Tab
+        </button>
       </div>
       {/* --- NEW: Active Jewelry Display --- */}
       {wornJewelry.length > 0 && (
@@ -210,7 +360,24 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
           🌟 Exclusive
         </button>
         <button
-          onClick={() => setActiveTab('jewelry')}
+          id="jewelry-tab"
+          onClick={(e) => {
+            console.log('Jewelry tab clicked! Event:', e);
+            console.log('Event target:', e.target);
+            console.log('Event currentTarget:', e.currentTarget);
+            console.log('Setting active tab to jewelry, current activeTab:', activeTab);
+            setActiveTab('jewelry');
+            // Check if this is the jewelry tutorial and we're on the first step
+            console.log('Jewelry tab clicked:', { activeTutorial, stepIndex });
+            if (activeTutorial === 'assetsJewelryTutorial' && stepIndex === 0) {
+              console.log('Advancing tutorial from jewelry tab click');
+              nextStep();
+            } else if (activeTutorial === 'assetsJewelryTutorial') {
+              console.log('Tutorial is active but stepIndex is:', stepIndex);
+            } else {
+              console.log('No tutorial active or wrong step');
+            }
+          }}
           className={`tab-btn ${activeTab === 'jewelry' ? 'active' : ''}`}
           style={{ padding: '10px', borderRadius: '8px', fontSize: '12px' }}
         >
@@ -306,10 +473,12 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
   );
 
   function renderTabContent() {
+    console.log('Rendering tab content for activeTab:', activeTab);
     switch (activeTab) {
       case 'exclusive':
         return <div style={{ color: '#ffaa00', textAlign: 'center', padding: 40 }}>Exclusive drops coming soon!</div>;
       case 'jewelry':
+        console.log('Rendering jewelry tab content');
         return renderJewelryTab();
       case 'cars':
         return renderCarsTab();
@@ -326,6 +495,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
     const jewelry = (gameData.assets || []).filter((a: any) => a.type === 'jewelry');
     const owned = getOwnedAssets('jewelry');
     const wearing = getWornJewelry();
+    console.log('Rendering jewelry tab with items:', jewelry.map(item => ({ id: item.id, name: item.name })));
     return (
       <>
         <div style={{
@@ -351,6 +521,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                   key={inst.instanceId}
                   className="market-item"
                   style={{ border: isWorn ? '2px solid #ffaa00' : '2px solid #66ff66', marginBottom: '10px' }}
+                  data-jewelry-owned="true"
                 >
                   <div className="market-header">
                     <div className="drug-name">
@@ -366,6 +537,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     {!isWorn ? (
                       <button
+                        id="wear-jewelry-button"
                         onClick={() => handleWearJewelry(inst.instanceId)}
                         className="action-btn"
                         style={{ padding: '6px', fontSize: '11px' }}
@@ -409,10 +581,14 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                 {item.description} • ⭐ +{item.flexScore} Flex
               </div>
               <button
+                id={item.name === 'Silver Chain' ? 'silver-chain-purchase' : undefined}
                 onClick={() => handlePurchaseAsset(item.id)}
                 className="action-btn"
                 style={{ width: '100%', padding: '8px' }}
                 disabled={cash < item.cost}
+                data-item-name={item.name}
+                data-item-id={item.id}
+                data-tutorial-target={item.name === 'Silver Chain' ? 'silver-chain-purchase' : undefined}
               >
                 💎 Purchase
               </button>
@@ -729,6 +905,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
             </div>
           </Modal>
         )}
+
       </>
     );
   }

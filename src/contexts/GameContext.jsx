@@ -3,6 +3,7 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
 import { RaidSystem } from '../game/systems/raid';
+import { useTutorial } from './TutorialContext';
 
 // --- Price & Supply Generation ---
 function generateCityPrices(city, gameData) {
@@ -293,6 +294,9 @@ function gameReducer(state, action) {
 const GameContext = createContext(undefined);
 
 export function GameProvider({ children }) {
+  // Get tutorial context for triggering assets tutorial
+  const { progress, startTutorial } = useTutorial();
+  
   // Load from localStorage if present
   const loadState = () => {
     try {
@@ -321,6 +325,9 @@ export function GameProvider({ children }) {
   };
 
   const [state, dispatch] = useReducer(gameReducer, initialState, loadState);
+
+  // Assets tutorial is now triggered by clicking the Asset button instead of automatically
+  // This allows the user to control when they want to see the tutorial
 
   // Auto-save on every state change
   useEffect(() => {

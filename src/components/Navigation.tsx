@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTutorial } from '../contexts/TutorialContext.jsx';
 
 interface NavigationProps {
   currentScreen: string;
@@ -7,6 +8,8 @@ interface NavigationProps {
 }
 
 export default function Navigation({ currentScreen, onNavigate, onSellAll }: NavigationProps) {
+  const { nextStep, activeTutorial, stepIndex, tutorialSteps } = useTutorial();
+  
   // Always show Home, Market, Travel
   const navItems = [
     { id: 'home', icon: '🏠', label: 'Home' },
@@ -36,9 +39,19 @@ export default function Navigation({ currentScreen, onNavigate, onSellAll }: Nav
       {navItems.map(item => (
         <button
           key={item.id}
+          id={item.id === 'travel' ? 'travel-nav-button' : `${item.id}-nav-button`}
           className={`action-btn${currentScreen === item.id ? ' active' : ''}`}
           style={{ flex: 1, minWidth: 0 }}
-          onClick={() => onNavigate(item.id)}
+          onClick={() => {
+            // Check if this is a tutorial click for Travel button
+            if (activeTutorial === 'gettingStarted' && stepIndex === 7 && item.id === 'travel') {
+              const step = tutorialSteps[activeTutorial][stepIndex];
+              if (step && step.requireClick) {
+                nextStep();
+              }
+            }
+            onNavigate(item.id);
+          }}
         >
           <span>{item.icon}</span>
           <span style={{ marginLeft: 4 }}>{item.label}</span>
@@ -46,9 +59,19 @@ export default function Navigation({ currentScreen, onNavigate, onSellAll }: Nav
       ))}
       {isTradingPage && (
         <button
+          id="sell-all-button"
           className="action-btn"
           style={{ flex: 1, minWidth: 0, background: '#ff6600', color: '#fff', fontWeight: 'bold', marginLeft: 8 }}
-          onClick={onSellAll}
+          onClick={() => {
+            // Check if this is a tutorial click for Sell All button
+            if (activeTutorial === 'gettingStarted' && stepIndex === 11) {
+              const step = tutorialSteps[activeTutorial][stepIndex];
+              if (step && step.requireClick) {
+                nextStep();
+              }
+            }
+            onSellAll?.();
+          }}
         >
           Sell All
         </button>

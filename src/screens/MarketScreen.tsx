@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGame } from '../contexts/GameContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext.jsx';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
 import { Modal } from '../components/Modal';
@@ -10,6 +11,7 @@ interface MarketScreenProps {
 
 const MarketScreen: React.FC<MarketScreenProps> = ({ onNavigate }) => {
   const { state, updateCash, travelToCity } = useGame();
+  const { nextStep, activeTutorial, stepIndex, tutorialSteps } = useTutorial();
   const currentCity = state.currentCity;
   const cash = state.cash;
   const [selectedCity, setSelectedCity] = useState(currentCity);
@@ -36,6 +38,8 @@ const MarketScreen: React.FC<MarketScreenProps> = ({ onNavigate }) => {
     updateCash(-travelCost);
     travelToCity(selectedCity);
     setShowTravelModal(false);
+    // Automatically navigate to trading page after travel
+    onNavigate('trading');
   };
 
   const handleTradeHere = () => {
@@ -61,15 +65,39 @@ const MarketScreen: React.FC<MarketScreenProps> = ({ onNavigate }) => {
       {/* City Selector */}
       <div style={{ marginBottom: '15px' }}>
         <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '5px' }}>Select City:</div>
-        <select
-          value={selectedCity}
-          onChange={e => setSelectedCity(e.target.value)}
-          style={{ width: '100%', padding: '8px', borderRadius: '6px', background: '#222', color: '#00ff00', border: '1px solid #666' }}
-        >
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+          gap: '8px' 
+        }}>
           {cities.map(city => (
-            <option key={city} value={city}>{city}</option>
+            <button
+              key={city}
+              id={city === 'San Antonio' ? 'san-antonio-button' : `${city}-button`}
+              onClick={() => {
+                setSelectedCity(city);
+                // Check if this is a tutorial click
+                if (activeTutorial === 'gettingStarted' && stepIndex === 3) {
+                  const step = tutorialSteps[activeTutorial][stepIndex];
+                  if (step && step.requireClick && city === 'San Antonio') {
+                    nextStep();
+                  }
+                }
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                background: selectedCity === city ? '#66ff66' : '#222',
+                color: selectedCity === city ? '#222' : '#fff',
+                border: '1px solid #666',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              {city}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {/* Current City Info */}
@@ -99,8 +127,18 @@ const MarketScreen: React.FC<MarketScreenProps> = ({ onNavigate }) => {
       {selectedCity !== currentCity && (
         <div style={{ marginBottom: '20px' }}>
           <button 
+            id="fast-travel-button"
             className="action-btn" 
-            onClick={handleFastTravel}
+            onClick={() => {
+              // Check if this is a tutorial click
+              if (activeTutorial === 'gettingStarted' && stepIndex === 4) {
+                const step = tutorialSteps[activeTutorial][stepIndex];
+                if (step && step.requireClick) {
+                  nextStep();
+                }
+              }
+              handleFastTravel();
+            }}
             style={{ width: '100%', background: '#ff6600' }}
             disabled={cash < travelCost}
           >

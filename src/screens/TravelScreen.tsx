@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { useGame } from '../contexts/GameContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext.jsx';
 import { Modal } from '../components/Modal';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
@@ -11,12 +12,28 @@ interface TravelScreenProps {
 
 export default function TravelScreen({ onNavigate }: TravelScreenProps) {
   const { state, updateCash, updateInventory, travelToCity } = useGame();
+  const { nextStep, activeTutorial, stepIndex, tutorialSteps } = useTutorial();
   const cash = state.cash;
   const currentCity = state.currentCity;
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showArrestModal, setShowArrestModal] = useState(false);
   const [arrestData, setArrestData] = useState<any>(null);
+  
+  // Handle tutorial navigation back to home
+  useEffect(() => {
+    if (activeTutorial === 'gettingStarted' && stepIndex === 9) {
+      const step = tutorialSteps[activeTutorial][stepIndex];
+      if (step && step.id === 'return-home') {
+        console.log('Tutorial: Navigating back to home for trading button step');
+        // Navigate back to home after a short delay to show the message
+        setTimeout(() => {
+          onNavigate('home');
+          nextStep();
+        }, 2000);
+      }
+    }
+  }, [activeTutorial, stepIndex, tutorialSteps, onNavigate, nextStep]);
   
   // Calculate heat level text
   const getHeatLevelText = () => {
@@ -30,6 +47,14 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
   const heatColor = heatLevel === 'High' || heatLevel === 'Critical' ? '#ff6666' : '#66ff66';
 
   const handleCityClick = (cityName: string, cost: number) => {
+    // Check if this is a tutorial click for Chicago
+    if (activeTutorial === 'gettingStarted' && stepIndex === 8 && cityName === 'Chicago') {
+      const step = tutorialSteps[activeTutorial][stepIndex];
+      if (step && step.requireClick) {
+        nextStep();
+      }
+    }
+    
     if (cash >= cost) {
       setSelectedCity(cityName);
       setShowConfirm(true);
@@ -172,6 +197,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
           return (
             <div
               key={cityName}
+              id={cityName === 'Chicago' ? 'chicago-button' : `${cityName.toLowerCase()}-button`}
               className="city-item"
               style={{
                 opacity: canAfford ? 1 : 0.5,

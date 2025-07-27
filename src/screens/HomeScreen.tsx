@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useGame, useCash, useCurrentCity } from '../contexts/GameContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext.jsx';
 import { Modal } from '../components/Modal';
 import { PlayerCard } from '../components/PlayerCard';
 // @ts-ignore
@@ -16,9 +17,10 @@ interface PendingPurchase {
 
 export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const { state, resetGame, updateCash, updateInventory, addNotification, dispatch, getAssetSummary } = useGame();
+  const { resetTutorial, nextStep, activeTutorial, stepIndex, tutorialSteps, startTutorial, skipTutorial, progress } = useTutorial();
   // Remove systems and events, use only state and gameState
   const cash = state.cash ?? 0;
-  const currentCity = state.currentCity || 'Unknown';
+  const currentCity = state.currentCity;
   const assetSummary = getAssetSummary();
   // Calculate net worth: cash + inventory value (using current city prices if available)
   const getNetWorth = () => {
@@ -46,6 +48,8 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [showGangConfirm, setShowGangConfirm] = useState(false);
   const [pendingGunPurchase, setPendingGunPurchase] = useState<PendingPurchase>({ qty: 0, cost: 0 });
   const [pendingGangRecruit, setPendingGangRecruit] = useState<PendingPurchase>({ qty: 0, cost: 0 });
+
+
 
   const cityData = gameData.cities[currentCity] || {};
   const heatLevel = state.heatLevel ?? 0;
@@ -92,11 +96,59 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     { id: 'bases', icon: '🏢', name: 'Manage Bases', onClick: () => onNavigate('bases') },
     { id: 'gang', icon: '👥', name: 'Manage Gang', onClick: () => onNavigate('gang') },
     { id: 'raid', icon: '⚔️', name: 'Raid Bases', onClick: () => onNavigate('raid') },
-    { id: 'market', icon: '💊', name: 'Market', onClick: () => onNavigate('market') },
-    { id: 'trading', icon: '💼', name: 'Trading', onClick: () => onNavigate('trading') },
+    { 
+      id: 'market', 
+      icon: '💊', 
+      name: 'Market', 
+      onClick: () => {
+        // Check if this is a tutorial click
+        if (activeTutorial === 'gettingStarted' && stepIndex === 1) {
+          const step = tutorialSteps[activeTutorial][stepIndex];
+          if (step && step.requireClick) {
+            nextStep();
+          }
+        }
+        onNavigate('market');
+      },
+      elementId: 'market-button'
+    },
+    { 
+      id: 'trading', 
+      icon: '💼', 
+      name: 'Trading', 
+      onClick: () => {
+        console.log('Trading button clicked');
+        console.log('Current tutorial state:', { activeTutorial, stepIndex });
+        // Check if this is a tutorial click for Trading button
+        if (activeTutorial === 'gettingStarted' && stepIndex === 10) {
+          console.log('Tutorial condition met, calling nextStep');
+          const step = tutorialSteps[activeTutorial][stepIndex];
+          if (step && step.requireClick) {
+            console.log('Calling nextStep from Trading button click');
+            nextStep();
+          }
+        }
+        console.log('Navigating to trading screen');
+        onNavigate('trading');
+      },
+      elementId: 'trading-button'
+    },
     { id: 'travel', icon: '✈️', name: 'Travel', onClick: () => onNavigate('travel') },
     { id: 'inventory', icon: '🎒', name: 'Inventory', onClick: () => onNavigate('inventory') },
-    { id: 'assets', icon: '💎', name: 'Assets', onClick: () => onNavigate('assets') },
+    { 
+      id: 'assets', 
+      icon: '💎', 
+      name: 'Assets', 
+      onClick: () => {
+        // Check if we should start the assets tutorial
+        if (progress.gettingStarted && !progress.assetsTutorial && state.cash >= 20000) {
+          console.log('Starting assets tutorial from Asset button click');
+          startTutorial('assetsTutorial');
+        }
+        onNavigate('assets');
+      },
+      elementId: 'assets-button'
+    },
     { id: 'ranking', icon: '🏆', name: 'Ranking', onClick: () => setShowRankingModal(true) },
     { id: 'mail', icon: '📧', name: 'Mail', onClick: () => onNavigate('mail') }
   ];
@@ -130,6 +182,66 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       </div>
       {/* Cash and Stats */}
       <PlayerCard />
+      
+      {/* Debug Tutorial Button */}
+      {!activeTutorial && (
+        <div style={{ 
+          background: '#333', 
+          border: '1px solid #666', 
+          borderRadius: '10px', 
+          padding: '10px', 
+          marginBottom: '10px',
+          textAlign: 'center'
+        }}>
+          <button 
+            onClick={() => {
+              console.log('Reset and Activate Assets Tutorial button clicked');
+              console.log('Before reset - progress:', progress);
+              resetTutorial('assetsTutorial');
+              // Start the tutorial immediately after resetting
+              setTimeout(() => {
+                console.log('Starting assets tutorial after reset');
+                startTutorial('assetsTutorial');
+              }, 100);
+              alert('Assets Tutorial Reset and Activated!');
+            }}
+            style={{ 
+              background: '#ff8800', 
+              color: '#fff', 
+              border: 'none', 
+              padding: '8px 16px', 
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginRight: '10px'
+            }}
+          >
+            🔄 Reset & Activate Assets Tutorial ({progress.assetsTutorial ? 'Completed' : 'Not Completed'})
+          </button>
+          <button 
+            onClick={() => {
+              // Test skip all tutorials functionality
+              console.log('Testing skip all tutorials');
+              skipTutorial();
+            }}
+            style={{ 
+              background: '#ff6600', 
+              color: '#fff', 
+              border: 'none', 
+              padding: '8px 16px', 
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginRight: '10px'
+            }}
+          >
+            🚫 Test Skip All Tutorials
+          </button>
+
+
+        </div>
+      )}
+      
       {/* Heat Warning */}
       {heatWarning && (
         <div className="warrant-card">
@@ -150,17 +262,20 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       )}
       {/* App Grid */}
       <div className="app-grid">
-        {appsWithSettings.map(app => (
-          <button
-            key={app.id}
-            className="app-icon"
-            onClick={app.onClick}
-            style={{ minWidth: 80 }}
-          >
-            <div style={{ fontSize: 32 }}>{app.icon}</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>{app.name}</div>
-          </button>
-        ))}
+        {appsWithSettings.map(app => {
+          return (
+            <button
+              key={app.id}
+              id={app.elementId || app.id}
+              className="app-icon"
+              onClick={app.onClick}
+              style={{ minWidth: 80 }}
+            >
+              <div style={{ fontSize: 32 }}>{app.icon}</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>{app.name}</div>
+            </button>
+          );
+        })}
       </div>
       {/* Bribery Modal */}
       {showBriberyModal && (
@@ -302,8 +417,34 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           >
             Reset Game
           </button>
-          <div style={{ fontSize: '12px', color: '#aaa' }}>
+          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: 12 }}>
             This will erase all progress and start a new game.
+          </div>
+          <button
+            className="action-btn"
+            style={{ background: '#66ff66', marginBottom: 12 }}
+            onClick={() => {
+              resetTutorial('gettingStarted');
+              setShowSettingsModal(false);
+            }}
+          >
+            Test Tutorial
+          </button>
+          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: 12 }}>
+            Reset the tutorial to test it again.
+          </div>
+          <button
+            className="action-btn"
+            style={{ background: '#ffaa00', marginBottom: 12 }}
+            onClick={() => {
+              localStorage.removeItem('tutorialProgress');
+              window.location.reload();
+            }}
+          >
+            Clear Tutorial Progress
+          </button>
+          <div style={{ fontSize: '12px', color: '#aaa' }}>
+            Clear all tutorial progress and reload.
           </div>
         </div>
       </Modal>

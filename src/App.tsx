@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame } from './contexts/GameContext.jsx';
-import Navigation from './components/Navigation';
+import { useTutorial } from './contexts/TutorialContext.jsx';
+import { Modal } from './components/Modal';
 import HomeScreen from './screens/HomeScreen';
 import MarketScreen from './screens/MarketScreen';
 import TravelScreen from './screens/TravelScreen';
@@ -11,12 +12,12 @@ import AssetsScreen from './screens/AssetsScreen';
 import TradingScreen from './screens/TradingScreen';
 import RaidScreen from './screens/RaidScreen';
 import MailScreen from './screens/MailScreen';
+import Navigation from './components/Navigation';
 import './App.css';
-import { Modal } from './components/Modal';
-import { useTutorial } from './contexts/TutorialContext';
 
 function GameContent() {
   const { state, sellAllDrugs } = useGame();
+
   // No systems, updateGameState, or refreshUI in minimal context
   const [currentScreen, setCurrentScreen] = useState('home');
 
@@ -149,11 +150,16 @@ function GameContent() {
 
 function App() {
   const { progress, startTutorial } = useTutorial();
+  
+  // Only trigger the gettingStarted tutorial
   React.useEffect(() => {
+    console.log('App useEffect - progress.gettingStarted:', progress.gettingStarted);
     if (!progress.gettingStarted) {
+      console.log('Starting gettingStarted tutorial');
       startTutorial('gettingStarted');
     }
-  }, [progress.gettingStarted, startTutorial]);
+  }, [progress.gettingStarted]); // Remove startTutorial from dependencies
+  
   return <GameContent />;
 }
 

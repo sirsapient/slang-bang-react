@@ -175,6 +175,13 @@ body {
     box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
 }
 
+/* Override hover effects for tutorial highlighted app icons */
+.app-icon.tutorial-highlight:hover {
+    transform: scale(1.01) !important;
+    border-color: #66ff66 !important;
+    box-shadow: 0 1px 3px rgba(102, 255, 102, 0.1) !important;
+}
+
 .app-emoji {
     font-size: 24px;
     margin-bottom: 8px;
@@ -599,4 +606,118 @@ input[type="range"]::-moz-range-thumb {
     background: #ff6600;
     cursor: pointer;
     border-radius: 50%;
+}
+
+/* Tutorial highlighting styles */
+.tutorial-highlight {
+  position: relative;
+  z-index: 1005 !important;
+  box-shadow: 0 2px 6px rgba(102, 255, 102, 0.15) !important;
+  border: 2px solid #66ff66 !important;
+  border-radius: 6px;
+  animation: tutorial-pulse 2s infinite;
+  transform: scale(1.01);
+  transition: transform 0.3s ease;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Special styling for trading button during tutorial */
+#trading-button.tutorial-highlight {
+  z-index: 1005 !important;
+  transform: scale(1.01) !important;
+  box-shadow: 0 1px 3px rgba(102, 255, 102, 0.1) !important;
+  border: 2px solid #66ff66 !important;
+  border-radius: 6px;
+  filter: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Special styling for fast travel button during tutorial */
+#fast-travel-button.tutorial-highlight {
+  z-index: 1005 !important;
+  transform: scale(1.01) !important;
+  box-shadow: 0 2px 6px rgba(102, 255, 102, 0.15) !important;
+  border: 2px solid #66ff66 !important;
+  border-radius: 6px;
+  filter: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Special styling for sell all button during tutorial */
+#sell-all-button.tutorial-highlight {
+  z-index: 1005 !important;
+  transform: scale(1.01) !important;
+  box-shadow: 0 2px 6px rgba(102, 255, 102, 0.15) !important;
+  border: 2px solid #66ff66 !important;
+  border-radius: 6px;
+  filter: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Special styling for silver chain purchase button during tutorial */
+#silver-chain-purchase.tutorial-highlight {
+  z-index: 1007 !important;
+  transform: scale(1.01) !important;
+  box-shadow: 0 2px 8px rgba(255, 170, 0, 0.2) !important;
+  border: 2px solid #ffaa00 !important;
+  border-radius: 8px;
+  filter: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  animation: tutorial-pulse-orange 2s infinite;
+}
+
+@keyframes tutorial-pulse-orange {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.tutorial-highlight::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 1px solid #66ff66;
+  border-radius: inherit;
+  animation: tutorial-pulse 2s infinite;
+  z-index: -1;
+  background: rgba(102, 255, 102, 0.05);
+}
+
+@keyframes tutorial-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Ensure highlighted elements are always clickable */
+.tutorial-highlight {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Make sure highlighted elements are not covered by overlay */
+.tutorial-highlight * {
+  pointer-events: auto !important;
+}
+
+/* Ensure app grid is clickable during tutorial */
+.app-grid .tutorial-highlight {
+  z-index: 1006 !important;
+}
+
+/* Tutorial overlay should not block highlighted elements */
+.tutorial-overlay {
+  pointer-events: none;
+}
+
+.tutorial-overlay > div {
+  pointer-events: auto;
 }
