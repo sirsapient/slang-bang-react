@@ -48,6 +48,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [showGangConfirm, setShowGangConfirm] = useState(false);
   const [pendingGunPurchase, setPendingGunPurchase] = useState<PendingPurchase>({ qty: 0, cost: 0 });
   const [pendingGangRecruit, setPendingGangRecruit] = useState<PendingPurchase>({ qty: 0, cost: 0 });
+  const [showRaidRequirementModal, setShowRaidRequirementModal] = useState(false);
 
 
 
@@ -102,7 +103,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       onClick: () => {
         // Check if player has a base in current city
         if (!hasBaseInCity(currentCity)) {
-          alert(`You need to establish a base in ${currentCity} before you can raid here. Build a base first to unlock raiding in this city.`);
+          setShowRaidRequirementModal(true);
           return;
         }
         onNavigate('raid');
@@ -447,6 +448,47 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             onClick={() => setShowResetConfirm(false)}
           >
             Cancel
+          </button>
+        </div>
+      </Modal>
+      {/* Raid Requirement Modal */}
+      <Modal isOpen={showRaidRequirementModal} onClose={() => setShowRaidRequirementModal(false)} title="⚔️ Raid Requirements">
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '15px' }}>
+            🏢
+          </div>
+          <div style={{ fontSize: '18px', marginBottom: '15px', color: '#ffff00' }}>
+            Base Required for Raiding
+          </div>
+          <div style={{ fontSize: '14px', marginBottom: '20px', color: '#ccc', lineHeight: '1.4' }}>
+            You need to establish a base in <strong>{currentCity}</strong> before you can raid here.
+            <br /><br />
+            Bases provide the local presence and resources needed to conduct raids in a city.
+            <br /><br />
+            <strong>How to unlock raiding:</strong>
+            <br />
+            • Build a base in {currentCity} from the Manage Bases screen
+            <br />
+            • Assign gang members and guns to your base
+            <br />
+            • Once operational, you'll be able to raid in this city
+          </div>
+          <button
+            className="action-btn"
+            style={{ background: '#66ff66', marginRight: '10px' }}
+            onClick={() => {
+              setShowRaidRequirementModal(false);
+              onNavigate('bases');
+            }}
+          >
+            🏢 Go to Bases
+          </button>
+          <button
+            className="action-btn"
+            style={{ background: '#ff6666' }}
+            onClick={() => setShowRaidRequirementModal(false)}
+          >
+            Close
           </button>
         </div>
       </Modal>
