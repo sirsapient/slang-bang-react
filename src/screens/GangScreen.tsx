@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame } from '../contexts/GameContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext';
 import { ConfirmModal } from '../components/Modal';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
@@ -10,6 +11,7 @@ interface GangScreenProps {
 
 export default function GangScreen({ onNavigate }: GangScreenProps) {
   const { state, updateCash, dispatch } = useGame();
+  const { progress, startTutorial } = useTutorial();
   const currentCity = state.currentCity;
   const cash = state.cash;
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -41,6 +43,14 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
   };
   const availableGang = getAvailableGangMembers();
   const availableGangInCity = getAvailableGangMembersInCity(currentCity);
+  
+  // Tutorial trigger logic
+  useEffect(() => {
+    // Only start tutorial if it hasn't been completed and there are unassigned gang members
+    if (!progress.gangManagementTutorial && availableGang > 0) {
+      startTutorial('gangManagementTutorial');
+    }
+  }, [progress.gangManagementTutorial, availableGang, startTutorial]);
   
   const calculateTransferCost = (fromCity: string, toCity: string, amount: number) => {
     const baseTransferCost = gameData.config.baseGangCost * 0.3;
