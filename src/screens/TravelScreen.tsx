@@ -195,7 +195,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
         });
         const currentCash = state.cash;
         updateCash(-currentCash);
-        addNotification(`🚨 BUSTED! All drugs AND cash confiscated. Lost $${totalDrugs.toLocaleString()} in drugs + $${currentCash.toLocaleString()} cash.`, 'bust');
+        addNotification(`🚨 BUSTED! All drugs AND cash confiscated. Lost $${totalDrugs.toLocaleString()} in drugs + $${Math.floor(currentCash).toLocaleString()} cash.`, 'bust');
         // TODO: updateWarrant(10000);
         break;
     }
@@ -302,7 +302,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
         borderRadius: '8px',
         fontSize: '12px'
       }}>
-        <div>💰 Your Cash: ${cash.toLocaleString()}</div>
+        <div>💰 Your Cash: ${Math.floor(cash).toLocaleString()}</div>
         <div>📍 Current City: {currentCity}</div>
         <div>🔥 Heat Level: <span style={{ color: heatColor }}>{heatLevel}</span></div>
         <div>🎒 Total Inventory: {Object.values(state.inventory).reduce((sum: number, qty: any) => sum + (qty as number), 0)} units</div>

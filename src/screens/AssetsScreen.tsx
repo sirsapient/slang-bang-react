@@ -4,6 +4,7 @@ import { useGame, useCash, useCurrentCity } from '../contexts/GameContext.jsx';
 import { useTutorial } from '../contexts/TutorialContext';
 import { Modal } from '../components/Modal';
 import { gameData } from '../game/data/gameData';
+import { formatLargeCurrency } from '../game/utils.js';
 import type { Asset, AssetInstance } from '../game/data/gameData-types';
 
 interface AssetsScreenProps {
@@ -13,11 +14,59 @@ interface AssetsScreenProps {
 type TabType = 'exclusive' | 'jewelry' | 'cars' | 'property' | 'owned';
 
 export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
-  const { state, buyAsset, sellAsset, wearJewelry, removeJewelry, getOwnedAssets, getAllOwnedInstances, getWornJewelry, getAssetSummary } = useGame();
+  const { state, buyAsset, sellAsset, wearJewelry, removeJewelry, getOwnedAssets, getAllOwnedInstances, getWornJewelry, getAssetSummary, calculateNetWorth } = useGame();
   const { activeTutorial, stepIndex, tutorialSteps, nextStep, progress, startTutorial, setStepIndex, hasSeenFirstAssetsModal } = useTutorial();
   const cash = useCash();
   const currentCity = useCurrentCity();
   
+  // Helper function to get current player rank
+  const getCurrentPlayerRank = () => {
+    const netWorth = calculateNetWorth();
+    const basesOwned = Object.keys(state.bases || {}).length;
+    const gangSize = state.gangSize || 0;
+    const assetValue = getAssetSummary().totalValue;
+
+    let currentRank = 1;
+    for (let rankId = 10; rankId >= 1; rankId--) {
+      const rank = gameData.playerRanks[rankId];
+      if (!rank) continue;
+      if (netWorth >= rank.minNetWorth && 
+          basesOwned >= rank.minBases && 
+          gangSize >= rank.minGang &&
+          assetValue >= rank.minAssets) {
+        currentRank = rankId;
+        break;
+      }
+    }
+    return currentRank;
+  };
+
+  // Helper function to check if asset is unlocked
+  const isAssetUnlocked = (asset: any) => {
+    const currentRank = getCurrentPlayerRank();
+    return !asset.unlockRank || currentRank >= asset.unlockRank;
+  };
+
+  // Helper function to get tier color
+  const getTierColor = (tier: number) => {
+    switch (tier) {
+      case 1: return '#66ff66'; // Green
+      case 2: return '#ffaa00'; // Orange
+      case 3: return '#ff0066'; // Pink/Red
+      default: return '#66ff66';
+    }
+  };
+
+  // Helper function to get tier name
+  const getTierName = (tier: number) => {
+    switch (tier) {
+      case 1: return 'Basic';
+      case 2: return 'Premium';
+      case 3: return 'Luxury';
+      default: return 'Basic';
+    }
+  };
+
   // Check if we should start the jewelry tutorial
   // Only start if the user has completed the first assets tutorial but hasn't completed the jewelry tutorial
   const shouldStartJewelryTutorial = progress.assetsTutorial && !progress.assetsJewelryTutorial && activeTutorial === null;
@@ -235,7 +284,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
               💰 Cash
             </div>
             <div style={{ fontSize: '16px', color: '#66ff66', fontWeight: 'bold' }}>
-              ${cash.toLocaleString()}
+              {formatLargeCurrency(cash)}
             </div>
           </div>
           <div>
@@ -243,7 +292,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
               💎 Asset Value
             </div>
             <div style={{ fontSize: '16px', color: '#ffaa00', fontWeight: 'bold' }}>
-              ${summary.totalValue.toLocaleString()}
+              {formatLargeCurrency(summary.totalValue)}
             </div>
           </div>
           <div>
@@ -406,6 +455,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
     const jewelry = (gameData.assets || []).filter((a: any) => a.type === 'jewelry');
     const owned = getOwnedAssets('jewelry');
     const wearing = getWornJewelry();
+    const currentRank = getCurrentPlayerRank();
     console.log('Rendering jewelry tab with items:', jewelry.map(item => ({ id: item.id, name: item.name })));
     return (
       <>
@@ -418,11 +468,15 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
           fontSize: '12px',
           color: '#ffff00'
         }}>
-          Wearing: {wearing.length} jewelry items
+          Wearing: {wearing.length} jewelry items • Current Rank: {gameData.playerRanks[currentRank]?.name || `Rank ${currentRank}`}
         </div>
         {jewelry.map((item: any) => {
           const ownedInstances: AssetInstance[] = owned[item.id] || [];
           const ownedCount = ownedInstances.length;
+          const isUnlocked = isAssetUnlocked(item);
+          const tierColor = getTierColor(item.tier || 1);
+          const tierName = getTierName(item.tier || 1);
+          
           // --- NEW: Show all owned instances, with wear/unassign for each ---
           return ownedCount > 0 ? (
             ownedInstances.map((inst, idx) => {
@@ -431,12 +485,24 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                 <div
                   key={inst.instanceId}
                   className="market-item"
-                  style={{ border: isWorn ? '2px solid #ffaa00' : '2px solid #66ff66', marginBottom: '10px' }}
+                  style={{ 
+                    border: isWorn ? '2px solid #ffaa00' : `2px solid ${tierColor}`, 
+                    marginBottom: '10px',
+                    opacity: isUnlocked ? 1 : 0.5
+                  }}
                   data-jewelry-owned="true"
                 >
                   <div className="market-header">
                     <div className="drug-name">
                       {item.name} {isWorn && '👤'}
+                      <span style={{ 
+                        color: tierColor, 
+                        fontSize: '10px', 
+                        marginLeft: '5px',
+                        fontWeight: 'bold'
+                      }}>
+                        [{tierName}]
+                      </span>
                     </div>
                     <div className="drug-price">
                       💰 ${inst.resaleValue.toLocaleString()}
@@ -479,10 +545,22 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
             <div
               key={item.id}
               className="market-item"
+              style={{ 
+                opacity: isUnlocked ? 1 : 0.5,
+                border: `2px solid ${tierColor}`
+              }}
             >
               <div className="market-header">
                 <div className="drug-name">
                   {item.name}
+                  <span style={{ 
+                    color: tierColor, 
+                    fontSize: '10px', 
+                    marginLeft: '5px',
+                    fontWeight: 'bold'
+                  }}>
+                    [{tierName}]
+                  </span>
                 </div>
                 <div className="drug-price">
                   ${item.cost.toLocaleString()}
@@ -490,18 +568,23 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
               </div>
               <div style={{ fontSize: '12px', color: '#aaa', margin: '8px 0' }}>
                 {item.description} • ⭐ +{item.flexScore} Flex
+                {!isUnlocked && (
+                  <div style={{ color: '#ff6666', marginTop: '4px' }}>
+                    🔒 Unlocks at {gameData.playerRanks[item.unlockRank]?.name || `Rank ${item.unlockRank}`}
+                  </div>
+                )}
               </div>
               <button
                 id={item.name === 'Silver Chain' ? 'silver-chain-purchase' : undefined}
                 onClick={() => handlePurchaseAsset(item.id)}
                 className="action-btn"
                 style={{ width: '100%', padding: '8px' }}
-                disabled={cash < item.cost}
+                disabled={cash < item.cost || !isUnlocked}
                 data-item-name={item.name}
                 data-item-id={item.id}
                 data-tutorial-target={item.name === 'Silver Chain' ? 'silver-chain-purchase' : undefined}
               >
-                💎 Purchase
+                {isUnlocked ? '💎 Purchase' : '🔒 Locked'}
               </button>
             </div>
           );
@@ -513,6 +596,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
   function renderCarsTab() {
     const cars = (gameData.assets || []).filter((a: any) => a.type === 'car');
     const owned = getOwnedAssets('car');
+    const currentRank = getCurrentPlayerRank();
     let totalOwnedCars = 0;
     Object.values(owned).forEach((instances: any) => {
       totalOwnedCars += instances.length;
@@ -529,20 +613,35 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
           fontSize: '12px',
           color: '#ffff00'
         }}>
-          Car Storage: {totalOwnedCars} cars
+          Car Storage: {totalOwnedCars} cars • Current Rank: {gameData.playerRanks[currentRank]?.name || `Rank ${currentRank}`}
         </div>
         {cars.map((item: any) => {
           const ownedInstances = owned[item.id] || [];
           const ownedCount = ownedInstances.length;
+          const isUnlocked = isAssetUnlocked(item);
+          const tierColor = getTierColor(item.tier || 1);
+          const tierName = getTierName(item.tier || 1);
+          
           return (
             <div
               key={item.id}
               className="market-item"
-              style={ownedCount > 0 ? { border: '2px solid #66ff66' } : {}}
+              style={{ 
+                border: ownedCount > 0 ? `2px solid ${tierColor}` : `2px solid ${tierColor}`,
+                opacity: isUnlocked ? 1 : 0.5
+              }}
             >
               <div className="market-header">
                 <div className="drug-name">
                   {item.name}
+                  <span style={{ 
+                    color: tierColor, 
+                    fontSize: '10px', 
+                    marginLeft: '5px',
+                    fontWeight: 'bold'
+                  }}>
+                    [{tierName}]
+                  </span>
                   {ownedCount > 0 && ` ✅ (${ownedCount})`}
                 </div>
                 <div className="drug-price">
@@ -553,6 +652,11 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
               </div>
               <div style={{ fontSize: '12px', color: '#aaa', margin: '8px 0' }}>
                 {item.description} • ⭐ +{item.flexScore} Flex
+                {!isUnlocked && (
+                  <div style={{ color: '#ff6666', marginTop: '4px' }}>
+                    🔒 Unlocks at {gameData.playerRanks[item.unlockRank]?.name || `Rank ${item.unlockRank}`}
+                  </div>
+                )}
               </div>
               {ownedCount > 0 ? (
                 <button
@@ -567,9 +671,9 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                   onClick={() => handlePurchaseAsset(item.id)}
                   className="action-btn"
                   style={{ width: '100%', padding: '8px' }}
-                  disabled={cash < item.cost}
+                  disabled={cash < item.cost || !isUnlocked}
                 >
-                  🚗 Purchase
+                  {isUnlocked ? '🚗 Purchase' : '🔒 Locked'}
                 </button>
               )}
             </div>
@@ -582,6 +686,7 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
   function renderPropertyTab() {
     const properties = (gameData.assets || []).filter((a: any) => a.type === 'property');
     const owned = getOwnedAssets('property');
+    const currentRank = getCurrentPlayerRank();
     return (
       <>
         <div style={{
@@ -593,20 +698,35 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
           fontSize: '12px',
           color: '#aaa'
         }}>
-          Properties increase your jewelry and car storage capacity
+          Properties increase your jewelry and car storage capacity • Current Rank: {gameData.playerRanks[currentRank]?.name || `Rank ${currentRank}`}
         </div>
         {properties.map((item: any) => {
           const ownedInstances = owned[item.id] || [];
           const ownedCount = ownedInstances.length;
+          const isUnlocked = isAssetUnlocked(item);
+          const tierColor = getTierColor(item.tier || 1);
+          const tierName = getTierName(item.tier || 1);
+          
           return (
             <div
               key={item.id}
               className="market-item"
-              style={ownedCount > 0 ? { border: '2px solid #66ff66' } : {}}
+              style={{ 
+                border: ownedCount > 0 ? `2px solid ${tierColor}` : `2px solid ${tierColor}`,
+                opacity: isUnlocked ? 1 : 0.5
+              }}
             >
               <div className="market-header">
                 <div className="drug-name">
                   {item.name}
+                  <span style={{ 
+                    color: tierColor, 
+                    fontSize: '10px', 
+                    marginLeft: '5px',
+                    fontWeight: 'bold'
+                  }}>
+                    [{tierName}]
+                  </span>
                   {ownedCount > 0 && ` ✅ (${ownedCount})`}
                 </div>
                 <div className="drug-price">
@@ -617,6 +737,11 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
               </div>
               <div style={{ fontSize: '12px', color: '#aaa', margin: '8px 0' }}>
                 {item.description} • ⭐ +{item.flexScore} Flex
+                {!isUnlocked && (
+                  <div style={{ color: '#ff6666', marginTop: '4px' }}>
+                    🔒 Unlocks at {gameData.playerRanks[item.unlockRank]?.name || `Rank ${item.unlockRank}`}
+                  </div>
+                )}
               </div>
               <div style={{
                 background: '#1a1a1a',
@@ -641,9 +766,9 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                   onClick={() => handlePurchaseAsset(item.id)}
                   className="action-btn"
                   style={{ width: '100%', padding: '8px' }}
-                  disabled={cash < item.cost}
+                  disabled={cash < item.cost || !isUnlocked}
                 >
-                  🏠 Purchase
+                  {isUnlocked ? '🏠 Purchase' : '🔒 Locked'}
                 </button>
               )}
             </div>
@@ -708,12 +833,15 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                 const isWorn = wearing.includes(instance.instanceId);
                 const isExclusive = instance.exclusive;
                 const showFastTravel = (instance.type === 'car' || instance.type === 'property') && currentCity !== instance.cityPurchased;
+                const tierColor = getTierColor(instance.tier || 1);
+                const tierName = getTierName(instance.tier || 1);
+                
                 return (
                   <div
                     key={instance.instanceId}
                     style={{
                       background: '#222',
-                      border: `1px solid ${isExclusive ? '#ffaa00' : '#444'}`,
+                      border: `1px solid ${isExclusive ? '#ffaa00' : tierColor}`,
                       borderRadius: '8px',
                       padding: '12px',
                       marginBottom: '10px'
@@ -727,6 +855,14 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
                       <div>
                         <div style={{ fontWeight: 'bold', color: '#fff' }}>
                           {instance.name} {isWorn && '👤'} {isExclusive && '🌟'}
+                          <span style={{ 
+                            color: tierColor, 
+                            fontSize: '10px', 
+                            marginLeft: '5px',
+                            fontWeight: 'bold'
+                          }}>
+                            [{tierName}]
+                          </span>
                         </div>
                         <div style={{ fontSize: '11px', color: '#aaa' }}>
                           Bought Day {instance.purchaseDate} • ⭐ +{instance.flexScore} Flex

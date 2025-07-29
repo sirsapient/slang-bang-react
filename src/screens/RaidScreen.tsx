@@ -305,7 +305,7 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
           fontSize: '11px',
           color: '#aaa'
         }}>
-          <div>💰 ${target.cash.toLocaleString()}</div>
+          <div>💰 ${Math.floor(target.cash).toLocaleString()}</div>
           <div>📦 {totalDrugs} drugs</div>
           <div>👥 {target.gangSize} guards</div>
         </div>
@@ -534,16 +534,16 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
               Raid Successful!
             </div>
             <div style={{ fontSize: '14px', color: '#aaffaa' }}>
-              Looted ${cash.toLocaleString()} and drugs
+              Looted ${Math.floor(cash).toLocaleString()} and drugs
             </div>
             {raidResult.baseDamage && (
               <div style={{ fontSize: '12px', color: '#ffaa00', marginTop: '8px' }}>
                 💥 Base damaged: ${raidResult.baseDamage.toLocaleString()}
               </div>
             )}
-            {raidResult.losses && (raidResult.losses.gangLost > 0 || raidResult.losses.gunsLost > 0) && (
+            {(raidResult.gangLost > 0 || raidResult.gunsLost > 0) && (
               <div style={{ fontSize: '12px', color: '#ff6666', marginTop: '8px' }}>
-                💀 Lost {raidResult.losses.gangLost} gang members and {raidResult.losses.gunsLost} guns
+                💀 Lost {raidResult.gangLost || 0} gang members and {raidResult.gunsLost || 0} guns
               </div>
             )}
           </div>
@@ -557,7 +557,7 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
               Loot Details
             </div>
             <div style={{ fontSize: '12px', color: '#aaa' }}>
-              <div>💰 Cash: ${cash.toLocaleString()}</div>
+              <div>💰 Cash: ${Math.floor(cash).toLocaleString()}</div>
               {Object.keys(drugs).map(drug => (
                 <div key={drug}>📦 {drug}: {drugs[drug]}</div>
               ))}
@@ -611,9 +611,9 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
                 💥 Base damaged: ${raidResult.baseDamage.toLocaleString()}
               </div>
             )}
-            {raidResult.losses && (raidResult.losses.gangLost > 0 || raidResult.losses.gunsLost > 0) && (
+            {(raidResult.gangLost > 0 || raidResult.gunsLost > 0) && (
               <div style={{ fontSize: '12px', color: '#ff6666', marginTop: '8px' }}>
-                💀 Lost {raidResult.losses.gangLost} gang members and {raidResult.losses.gunsLost} guns
+                💀 Lost {raidResult.gangLost || 0} gang members and {raidResult.gunsLost || 0} guns
               </div>
             )}
           </div>

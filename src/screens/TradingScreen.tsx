@@ -167,7 +167,7 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
           ← Back
         </button>
         <h3>💼 Trading - {currentCity}</h3>
-        <div style={{ fontSize: '12px', color: '#aaa' }}>Cash: <span style={{ color: '#ffcc00' }}>${cash.toLocaleString()}</span></div>
+        <div style={{ fontSize: '12px', color: '#aaa' }}>Cash: <span style={{ color: '#ffcc00' }}>${Math.floor(cash).toLocaleString()}</span></div>
       </div>
       <div style={{ marginBottom: '20px' }}>
         <div style={{

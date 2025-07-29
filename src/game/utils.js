@@ -10,18 +10,38 @@ export function formatCurrency(amount) {
     return '$' + formatNumber(amount);
 }
 
+// Format large numbers with abbreviated notation
+export function formatLargeNumber(num) {
+    if (num >= 1000000000) {
+        return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+    } else if (num >= 1000000) {
+        return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    } else {
+        return num.toString();
+    }
+}
+
+// Format currency with abbreviated notation for large amounts
+export function formatLargeCurrency(amount) {
+    if (amount >= 1000000000) {
+        return '$' + (amount / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+    } else if (amount >= 1000000) {
+        return '$' + (amount / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    } else if (amount >= 1000) {
+        return '$' + (amount / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    } else {
+        return '$' + amount.toString();
+    }
+}
+
 // Update phone time display
 export function updatePhoneTime() {
     const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false 
-    });
-    const timeElement = document.getElementById('phoneTime');
-    if (timeElement) {
-        timeElement.textContent = timeString;
-    }
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
 }
 
 // Get random number between min and max (inclusive)
@@ -179,6 +199,8 @@ export function shuffleArray(array) {
 export default {
     formatNumber,
     formatCurrency,
+    formatLargeNumber,
+    formatLargeCurrency,
     updatePhoneTime,
     randomBetween,
     clamp,

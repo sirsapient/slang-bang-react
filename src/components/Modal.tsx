@@ -2,8 +2,6 @@ import React, { type ReactNode } from 'react';
 import ReactDOM from 'react-dom';
 import './Modal.css';
 
-console.log('Modal component loaded');
-
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -114,7 +112,6 @@ export function ConfirmModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel'
 }: ConfirmModalProps) {
-  console.log('ConfirmModal rendering with isOpen:', isOpen);
   if (!isOpen) return null;
 
   return ReactDOM.createPortal(

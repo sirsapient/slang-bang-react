@@ -35,7 +35,7 @@ export class AssetSystem {
         const netWorth = this.state.calculateNetWorth();
         const basesOwned = Object.keys(this.state.data.bases).length;
         const gangSize = this.state.get('gangSize');
-        const assetCount = this.getOwnedAssetCount();
+        const assetValue = this.getTotalAssetValue();
 
         let currentRank = 1;
         if (!this.data.playerRanks) {
@@ -48,7 +48,7 @@ export class AssetSystem {
             if (netWorth >= rank.minNetWorth && 
                 basesOwned >= rank.minBases && 
                 gangSize >= rank.minGang &&
-                assetCount >= rank.minAssets) {
+                assetValue >= rank.minAssets) {
                 currentRank = rankId;
                 break;
             }
@@ -223,6 +223,13 @@ export class AssetSystem {
         // Use current city if not specified
         if (!city) {
             city = this.state.get('currentCity');
+        }
+        
+        // Check if asset is unlocked for current player rank
+        const currentRank = this.getCurrentPlayerRank();
+        if (asset.unlockRank && currentRank < asset.unlockRank) {
+            const rankName = this.data.playerRanks[asset.unlockRank]?.name || `Rank ${asset.unlockRank}`;
+            return { success: false, error: `${asset.name} unlocks at ${rankName}` };
         }
         
         // Check if asset type is unlocked

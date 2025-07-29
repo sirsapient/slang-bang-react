@@ -16,7 +16,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ onNavigate }) => {
     <div className="inventory-screen">
       <h2>🎒 Inventory</h2>
       <div style={{ marginBottom: 16, fontSize: 16 }}>
-        Cash: <span style={{ color: '#ffcc00' }}>${cash.toLocaleString()}</span>
+        Cash: <span style={{ color: '#ffcc00' }}>${Math.floor(cash).toLocaleString()}</span>
       </div>
       <div style={{ background: '#222', borderRadius: '10px', overflow: 'hidden', marginBottom: 24 }}>
         <div style={{

@@ -59,6 +59,11 @@ export interface Asset {
   cost: number;
   resaleValue: number;
   flexScore: number;
+  tier: number;
+  unlockRank: number;
+  storageSize?: number;
+  capacity?: Record<string, number>;
+  description: string;
   // Add other fields as needed
   cityPurchased?: string;
   storagePropertyId?: string; // property instanceId if stored

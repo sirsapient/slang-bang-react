@@ -173,9 +173,7 @@ function App() {
   
   // Only trigger the gettingStarted tutorial
   React.useEffect(() => {
-    console.log('App useEffect - progress.gettingStarted:', progress.gettingStarted);
     if (!progress.gettingStarted) {
-      console.log('Starting gettingStarted tutorial');
       startTutorial('gettingStarted');
     }
   }, [progress.gettingStarted]); // Remove startTutorial from dependencies

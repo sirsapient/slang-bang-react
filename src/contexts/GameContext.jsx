@@ -1035,15 +1035,16 @@ export function GameProvider({ children }) {
   
   /**
    * Returns a summary of the player's assets.
-   * @returns {{ totalValue: number, flexScore: number }}
+   * @returns {{ totalValue: number, flexScore: number, totalAssets: number }}
    */
   const getAssetSummary = () => {
     let totalValue = 0;
     let flexScore = 0;
+    let totalAssets = 0;
     
     // Safety check for assets structure
     if (!state.assets || !state.assets.owned) {
-      return { totalValue, flexScore };
+      return { totalValue, flexScore, totalAssets };
     }
     
     // Handle both old and new data structures
@@ -1053,6 +1054,7 @@ export function GameProvider({ children }) {
         if (inst && typeof inst === 'object') {
           totalValue += inst.resaleValue || 0;
           flexScore += inst.flexScore || 0;
+          totalAssets++;
         }
       }
     } else {
@@ -1065,6 +1067,7 @@ export function GameProvider({ children }) {
                 if (inst && typeof inst === 'object') {
                   totalValue += inst.resaleValue || 0;
                   flexScore += inst.flexScore || 0;
+                  totalAssets++;
                 }
               }
             }
@@ -1073,7 +1076,7 @@ export function GameProvider({ children }) {
       }
     }
     
-    return { totalValue, flexScore };
+    return { totalValue, flexScore, totalAssets };
   };
   
   /**
@@ -1145,7 +1148,6 @@ export function GameProvider({ children }) {
   // Initialize RaidSystem only once
   React.useEffect(() => {
     if (!raidSystemRef.current) {
-      console.log('[RAID DEBUG] Initializing RaidSystem');
       // Minimal event logger for RaidSystem
       const events = {
         add: (msg, type) => addNotification(msg, type),
@@ -1157,7 +1159,6 @@ export function GameProvider({ children }) {
         updateCash: (amount) => updateCash(amount),
         updateInventory: (drug, amount) => updateInventory(drug, amount),
         updateWarrant: (amount) => {
-          console.log(`[WARRANT DEBUG] Updating warrant by ${amount} (current: ${state.warrant || 0})`);
           dispatch({ type: 'UPDATE_WARRANT', amount });
         },
         trackAchievement: () => {}, // stub
@@ -1190,7 +1191,6 @@ export function GameProvider({ children }) {
             count: currentActivity.count + 1,
             lastRaid: Date.now()
           };
-          console.log(`[RAID ACTIVITY] Incrementing raid activity for ${city}: ${currentActivity.count} -> ${newActivity.count}`);
           dispatch({
             type: 'UPDATE_CITY_RAID_ACTIVITY',
             city,
@@ -1199,7 +1199,6 @@ export function GameProvider({ children }) {
         },
       };
       raidSystemRef.current = new PlayerRaidSystem(raidState, events, gameData);
-      console.log('[RAID DEBUG] RaidSystem initialized');
       
       // Initialize BaseDefenseSystem
       const baseDefenseState = {
@@ -1251,7 +1250,6 @@ export function GameProvider({ children }) {
       };
       
       baseDefenseSystemRef.current = new BaseDefenseSystem(baseDefenseState, baseDefenseEvents, gameData);
-      console.log('[BASE DEFENSE DEBUG] BaseDefenseSystem initialized');
     }
   }, []); // Empty dependency array ensures this runs only once
   
@@ -1274,14 +1272,12 @@ export function GameProvider({ children }) {
   function getAvailableRaidTargets(city) {
     // Return all targets, including those on cooldown - the UI will handle displaying them properly
     if (!raidSystemRef.current) {
-      console.warn('[RAID DEBUG] RaidSystem not initialized yet');
       return [];
     }
     return raidSystemRef.current.enemyBases[city] || [];
   }
   function executeRaid(targetId, raidGangSize, city) {
     if (!raidSystemRef.current) {
-      console.warn('[RAID DEBUG] RaidSystem not initialized yet');
       return { success: false, error: 'Raid system not ready' };
     }
     // The RaidSystem will handle cooldown and all logic
@@ -1307,7 +1303,6 @@ export function GameProvider({ children }) {
   function getAllRaidTargets(city) {
     // Return all targets, including those on cooldown - the UI will handle displaying them properly
     if (!raidSystemRef.current) {
-      console.warn('[RAID DEBUG] RaidSystem not initialized yet');
       return [];
     }
     const allTargets = raidSystemRef.current.enemyBases[city] || [];
@@ -1317,11 +1312,6 @@ export function GameProvider({ children }) {
     const currentTime = Date.now();
     const cooldownPeriod = 5 * 60 * 1000;
     const isOnCooldown = (currentTime - target.lastRaid) < cooldownPeriod;
-    console.log('[CONTEXT DEBUG] isRaidTargetOnCooldown for target:', target.id);
-    console.log('[CONTEXT DEBUG] Current time:', currentTime);
-    console.log('[CONTEXT DEBUG] Last raid time:', target.lastRaid);
-    console.log('[CONTEXT DEBUG] Time since last raid:', currentTime - target.lastRaid);
-    console.log('[CONTEXT DEBUG] Is on cooldown:', isOnCooldown);
     return isOnCooldown;
   }
 
@@ -1339,7 +1329,6 @@ export function GameProvider({ children }) {
       count: currentActivity.count + 1,
       lastRaid: Date.now()
     };
-    console.log(`[RAID ACTIVITY] Incrementing raid activity for ${city}: ${currentActivity.count} -> ${newActivity.count}`);
     dispatch({
       type: 'UPDATE_CITY_RAID_ACTIVITY',
       city,
@@ -1509,6 +1498,43 @@ export function GameProvider({ children }) {
     };
   }
 
+  function calculateNetWorth() {
+    // Calculate cash
+    const cash = state.cash || 0;
+    
+    // Calculate inventory value
+    let inventoryValue = 0;
+    Object.entries(state.inventory || {}).forEach(([drug, amount]) => {
+      const drugData = gameData.drugs[drug];
+      if (drugData && amount > 0) {
+        // Use average price across all cities for inventory valuation
+        const avgPrice = Object.values(state.cityPrices || {}).reduce((sum, cityPrices) => {
+          return sum + (cityPrices[drug] || 0);
+        }, 0) / Math.max(1, Object.keys(state.cityPrices || {}).length);
+        inventoryValue += (amount || 0) * avgPrice;
+      }
+    });
+    
+    // Calculate assets value
+    const assetSummary = getAssetSummary();
+    const assetsValue = assetSummary.totalValue;
+    
+    // Calculate bases value (if any)
+    let basesValue = 0;
+    Object.values(state.bases || {}).forEach(cityBases => {
+      if (Array.isArray(cityBases)) {
+        cityBases.forEach(base => {
+          if (base && base.level) {
+            // Base value increases with level
+            basesValue += base.level * 10000; // 10k per level
+          }
+        });
+      }
+    });
+    
+    return Math.round(cash + inventoryValue + assetsValue + basesValue);
+  }
+
   // --- Context Value ---
   const value = {
     state,
@@ -1556,7 +1582,8 @@ export function GameProvider({ children }) {
     getHeatBreakdown,
     checkForBaseRaids,
     executeBaseRaid,
-    calculateBaseRaidProbability
+    calculateBaseRaidProbability,
+    calculateNetWorth
   };
 
   return (

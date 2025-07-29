@@ -7,6 +7,7 @@ import { PlayerCard } from '../components/PlayerCard';
 import { gameData } from '../game/data/gameData';
 import HeatBreakdown from '../components/HeatBreakdown';
 import BaseDefenseTest from '../components/BaseDefenseTest';
+import { formatLargeCurrency } from '../game/utils.js';
 
 interface HomeScreenProps {
   onNavigate: (screen: string) => void;
@@ -105,6 +106,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     { id: 'gang', icon: '👥', name: 'Gang Management', onClick: () => onNavigate('gang') },
     { id: 'assets', icon: '💎', name: 'Assets', onClick: () => onNavigate('assets'), elementId: 'assets-button' },
     { id: 'inventory', icon: '🎒', name: 'Inventory', onClick: () => onNavigate('inventory') },
+    { id: 'ranking', icon: '🏆', name: 'Ranking', onClick: () => setShowRankingModal(true) },
     { id: 'mail', icon: '📧', name: 'Mail', onClick: () => onNavigate('mail') },
   ];
 
@@ -502,15 +504,15 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
     return (
       <div style={{ textAlign: 'center', padding: '20px' }}>
         <div style={{ fontSize: '32px', marginBottom: '10px', color: '#ffcc00' }}>
-          🏆 Empire Value: ${empireValue.toLocaleString()}
+          🏆 Empire Value: ${formatLargeCurrency(empireValue)}
         </div>
         <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '20px' }}>
-          <div>💵 Cash: ${cash.toLocaleString()}</div>
-          <div>💎 Asset Value: ${assetSummary.totalValue.toLocaleString()}</div>
-          <div>🏢 Base Value: ${baseValue.toLocaleString()}</div>
-          <div>👥 Gang Value: ${gangValue.toLocaleString()}</div>
-          <div>🔫 Gun Value: ${gunValue.toLocaleString()}</div>
-          <div>🎒 Drug Inventory: ${drugValue.toLocaleString()}</div>
+                  <div>💵 Cash: {formatLargeCurrency(cash)}</div>
+        <div>💎 Asset Value: {formatLargeCurrency(assetSummary.totalValue)}</div>
+                  <div>🏢 Base Value: {formatLargeCurrency(baseValue)}</div>
+        <div>👥 Gang Value: {formatLargeCurrency(gangValue)}</div>
+        <div>🔫 Gun Value: {formatLargeCurrency(gunValue)}</div>
+        <div>🎒 Drug Inventory: {formatLargeCurrency(drugValue)}</div>
         </div>
         <div style={{ fontSize: '48px', marginBottom: '10px' }}>
           {currentRank.emoji}
@@ -535,9 +537,9 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             📊 Current Stats
           </div>
           <div style={{ textAlign: 'left', fontSize: '12px' }}>
-            💰 Net Worth: ${netWorth.toLocaleString()}<br/>
-            💵 Cash: ${cash.toLocaleString()}<br/>
-            💎 Asset Value: ${assetSummary.totalValue.toLocaleString()}<br/>
+                    💰 Net Worth: {formatLargeCurrency(netWorth)}<br/>
+        💵 Cash: {formatLargeCurrency(cash)}<br/>
+        💎 Asset Value: {formatLargeCurrency(assetSummary.totalValue)}<br/>
             🏢 Bases: {Object.keys(state.bases || {}).length}<br/>
             🏢 Leveled Bases: {leveledBases}<br/>
             👥 Gang: {state.gangSize || 0}<br/>
@@ -593,7 +595,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             💰 Available Cash
           </div>
           <div style={{ fontSize: '20px', color: '#66ff66', fontWeight: 'bold' }}>
-            ${cash.toLocaleString()}
+            {formatLargeCurrency(cash)}
           </div>
         </div>
         {/* Guns Section */}

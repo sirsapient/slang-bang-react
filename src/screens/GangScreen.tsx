@@ -117,7 +117,7 @@ export default function GangScreen({ onNavigate }: GangScreenProps) {
               💰 Cash
             </div>
             <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
-              ${cash.toLocaleString()}
+              ${Math.floor(cash).toLocaleString()}
             </div>
           </div>
           <div>

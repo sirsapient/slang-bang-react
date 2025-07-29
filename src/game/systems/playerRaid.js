@@ -154,6 +154,29 @@ export class PlayerRaidSystem {
         return Math.floor(gangSize * 0.4); // High losses
     }
     
+    calculateGunLosses(gangSize, successChance, targetDifficulty) {
+        // Guaranteed gun losses on failure - more severe than gang losses
+        if (successChance > 0.8) return 0; // High success = no losses
+        if (successChance > 0.6) return Math.floor(gangSize * 0.15); // Low losses
+        if (successChance > 0.4) return Math.floor(gangSize * 0.25); // Medium losses
+        return Math.floor(gangSize * 0.5); // High losses
+    }
+    
+    calculateGuaranteedLosses(gangSize, successChance, targetDifficulty) {
+        // New method for guaranteed losses on raid failure
+        const baseGangLoss = Math.max(1, Math.floor(gangSize * 0.2)); // Minimum 1 gang member lost
+        const baseGunLoss = Math.max(1, Math.floor(gangSize * 0.3)); // Minimum 1 gun lost
+        
+        // Scale losses based on difficulty and success chance
+        const difficultyMultiplier = 1 + (targetDifficulty * 0.5);
+        const failureMultiplier = 1 + ((1 - successChance) * 0.5);
+        
+        const gangLost = Math.floor(baseGangLoss * difficultyMultiplier * failureMultiplier);
+        const gunsLost = Math.floor(baseGunLoss * difficultyMultiplier * failureMultiplier);
+        
+        return { gangLost, gunsLost };
+    }
+    
     executeRaid(targetId, gangSize) {
         // Find the target object from the target ID
         const city = targetId.split('_')[0];
@@ -263,16 +286,12 @@ export class PlayerRaidSystem {
             this.state.updateWarrant(scaledHeat);
             
             // Calculate losses
-            const gangLost = Math.floor(gangSize * (0.1 + Math.random() * 0.2));
-            const gunsLost = Math.floor(gangSize * (0.1 + Math.random() * 0.2)); // Assume 1 gun per gang member sent
+            const { gangLost, gunsLost } = this.calculateGuaranteedLosses(gangSize, successChance, target.difficulty);
             if (gangLost > 0 && this.state.removeGangMembersFromCity) {
               this.state.removeGangMembersFromCity(city, gangLost);
             }
             if (gunsLost > 0 && this.state.removeGunsFromCity) {
               this.state.removeGunsFromCity(city, gunsLost);
-            }
-            if ((gangLost > 0 || gunsLost > 0) && this.state.addNotification) {
-              this.state.addNotification(`❌ Raid failed! Lost ${gangLost} gang members and ${gunsLost} guns in ${city}.`, 'error');
             }
             
             // Track failed raid
@@ -290,11 +309,11 @@ export class PlayerRaidSystem {
                 this.state.incrementCityRaidActivity(city);
             }
 
-            const failMsg = `❌ Raid failed! Gained ${scaledHeat.toLocaleString()} heat`;
+            const failMsg = `❌ Raid failed! Lost ${gangLost} gang members and ${gunsLost} guns in ${city}. Gained ${scaledHeat.toLocaleString()} heat`;
             this.events.add(failMsg, 'bad');
             this.state.addNotification(failMsg, 'error');
             
-            return { success: false, heatIncrease: scaledHeat };
+            return { success: false, heatIncrease: scaledHeat, gangLost, gunsLost };
         }
     }
     

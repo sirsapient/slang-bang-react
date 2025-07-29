@@ -19,7 +19,7 @@ const PlayerStats: React.FC<PlayerStatsProps> = ({
     <h2>Player Stats</h2>
     <ul>
       <li><strong>Name:</strong> {playerName}</li>
-      <li><strong>Cash:</strong> ${cash.toLocaleString()}</li>
+      <li><strong>Cash:</strong> ${Math.floor(cash).toLocaleString()}</li>
       <li><strong>City:</strong> {currentCity}</li>
       <li><strong>Day:</strong> {day}</li>
       <li><strong>Heat Level:</strong> {heatLevel}%</li>

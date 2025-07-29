@@ -1,17 +1,12 @@
 import React from 'react';
 import { useGame } from '../contexts/GameContext.jsx';
+import { formatLargeCurrency } from '../game/utils.js';
 
 export function PlayerCard() {
-  const context = useGame();
-  let cash = 0;
-  let currentCity = 'Unknown';
-  let heatLevel = 0;
-  if (context) {
-    const { state, gameState } = context;
-    currentCity = state.currentCity || (gameState.data && gameState.data.currentCity) || 'Unknown';
-    heatLevel = state.heat ?? 0;
-    cash = state.cash ?? (gameState.data && gameState.data.cash) ?? 0;
-  }
+  const { state } = useGame();
+  const cash = state.cash || 0;
+  const currentCity = state.currentCity || 'Unknown';
+  const heatLevel = state.heatLevel || 0;
   
   const getHeatColor = () => {
     if (heatLevel < 20) return '#66ff66';
@@ -31,7 +26,7 @@ export function PlayerCard() {
     <div className="player-card">
       <div className="cash-display">
         <div className="cash-title" style={{ fontSize: 15, color: '#fff', fontWeight: 'bold', marginBottom: 2 }}>Cash</div>
-        <div style={{ fontSize: 22, fontWeight: 'bold' }}>${Math.floor(cash).toLocaleString()}</div>
+        <div style={{ fontSize: 22, fontWeight: 'bold' }}>{formatLargeCurrency(cash)}</div>
       </div>
     </div>
   );
