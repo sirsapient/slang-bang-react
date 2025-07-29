@@ -30,28 +30,8 @@ export function PlayerCard() {
   return (
     <div className="player-card">
       <div className="cash-display">
-        ${cash.toLocaleString()}
-      </div>
-      <div className="stats-grid">
-        <div className="stat-item">
-          <div className="stat-label">Location</div>
-          <div className="stat-value">{currentCity}</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-label">Heat</div>
-          <div className="stat-value" style={{ color: getHeatColor() }}>
-            {getHeatText()}
-          </div>
-          <div className="heat-meter">
-            <div 
-              className="heat-bar"
-              style={{ 
-                width: `${heatLevel}%`,
-                background: getHeatColor()
-              }}
-            />
-          </div>
-        </div>
+        <div className="cash-title" style={{ fontSize: 15, color: '#fff', fontWeight: 'bold', marginBottom: 2 }}>Cash</div>
+        <div style={{ fontSize: 22, fontWeight: 'bold' }}>${Math.floor(cash).toLocaleString()}</div>
       </div>
     </div>
   );

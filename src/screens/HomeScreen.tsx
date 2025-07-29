@@ -157,22 +157,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
         </div>
       )}
 
-      {/* Heat Breakdown */}
-      <HeatBreakdown showDetails={false} />
-      
-      {/* Heat Details Button */}
-      <button
-        className="action-btn"
-        onClick={() => setShowHeatDetails(true)}
-        style={{ 
-          width: '100%', 
-          marginBottom: '15px',
-          background: '#333',
-          border: '1px solid #555'
-        }}
-      >
-        🔍 View Heat Details
-      </button>
+      {/* Removed HeatBreakdown and View Heat Details button */}
 
       {/* App Grid */}
       <div className="app-grid">

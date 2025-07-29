@@ -175,7 +175,7 @@ export declare class HeatSystem {
   constructor(gameState: IHeatSystemGameState, eventLogger: IHeatSystemEventLogger);
 }
 
-export interface IRaidSystemGameState {
+export interface IPlayerRaidSystemGameState {
   get(key: string): any;
   updateCash(amount: number): void;
   updateInventory(drug: string, amount: number): void;
@@ -187,10 +187,10 @@ export interface IRaidSystemGameState {
   incrementCityRaidActivity?(city: string): void;
   // ...add more as needed
 }
-export interface IRaidSystemEventLogger {
+export interface IPlayerRaidSystemEventLogger {
   add(message: string, type: string): void;
 }
-export interface IRaidSystemGameData {
+export interface IPlayerRaidSystemGameData {
   baseTypes: any;
   cities: any;
   drugs: any;
@@ -198,8 +198,8 @@ export interface IRaidSystemGameData {
   playerRanks?: any;
   // ...add more as needed
 }
-export declare class RaidSystem {
-  constructor(state: IRaidSystemGameState, events: IRaidSystemEventLogger, data: IRaidSystemGameData);
+export declare class PlayerRaidSystem {
+  constructor(state: IPlayerRaidSystemGameState, events: IPlayerRaidSystemEventLogger, data: IPlayerRaidSystemGameData);
 }
 
 export interface ITradingSystemGameState {

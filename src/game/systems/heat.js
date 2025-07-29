@@ -270,12 +270,8 @@ export class HeatSystem {
             const currentCity = this.state.get('currentCity');
             const hasBase = this.state.hasBase ? this.state.hasBase(currentCity) : false;
             
-            if (hasBase) {
-                const gangAttackChance = Math.min(0.4, (heat - 10) / 100);
-                if (Math.random() < gangAttackChance) {
-                    this.executeGangAttack(currentCity);
-                }
-            }
+            // OLD GANG ATTACK SYSTEM REMOVED - Now using new BaseDefenseSystem with priority-based losses
+            // The new system destroys guns/gangs first before taking drugs/cash
         }
     }
 
@@ -367,93 +363,9 @@ export class HeatSystem {
     }
 
     /**
-     * Execute a gang attack on the player's base.
-     * @param {string} city - The city where the base is located
+     * OLD GANG ATTACK SYSTEM REMOVED - Now using new BaseDefenseSystem with priority-based losses
+     * The new system destroys guns/gangs first before taking drugs/cash
      */
-    executeGangAttack(city) {
-        const base = this.state.getBase ? this.state.getBase(city) : null;
-        if (!base) {
-            return;
-        }
-
-        // Calculate base defense based on assigned gang and guns
-        const baseDefense = (base.assignedGang || 0) + (base.guns || 0);
-        const baseCash = base.cashStored || 0;
-        const baseInventory = base.inventory || {};
-        
-        // Calculate attack success chance (higher defense = lower success)
-        const attackSuccessChance = Math.max(0.1, 0.8 - (baseDefense * 0.02));
-        const attackSuccessful = Math.random() < attackSuccessChance;
-        
-        if (attackSuccessful) {
-            // Gang attack successful - steal cash and drugs
-            const cashStolen = Math.floor(baseCash * (0.3 + Math.random() * 0.4)); // 30-70% of cash
-            const drugsStolen = {};
-            
-            Object.keys(baseInventory).forEach(drug => {
-                const amount = baseInventory[drug] || 0;
-                const stolen = Math.floor(amount * (0.2 + Math.random() * 0.6)); // 20-80% of drugs
-                if (stolen > 0) {
-                    drugsStolen[drug] = stolen;
-                    base.inventory[drug] = Math.max(0, amount - stolen);
-                }
-            });
-            
-            // Update base cash
-            base.cashStored = Math.max(0, baseCash - cashStolen);
-            
-            // Create attack message
-            let attackMessage = `⚔️ Gang attack on your base in ${city}! Lost $${cashStolen.toLocaleString()} cash`;
-            if (Object.keys(drugsStolen).length > 0) {
-                const drugList = Object.keys(drugsStolen).map(drug => `${drugsStolen[drug]} ${drug}`).join(', ');
-                attackMessage += ` and ${drugList}`;
-            }
-            
-            this.events.add(attackMessage, 'bad');
-            this.state.addNotification(attackMessage, 'error');
-            
-            // Trigger temporary modal notification for successful gang attack
-            if (window.triggerGangAttackNotification) {
-                let modalContent = `⚔️ <strong>GANG ATTACK!</strong><br><br>`;
-                modalContent += `<strong>Location:</strong> ${city}<br>`;
-                modalContent += `<strong>Cash Stolen:</strong> $${cashStolen.toLocaleString()}<br>`;
-                if (Object.keys(drugsStolen).length > 0) {
-                    const drugList = Object.keys(drugsStolen).map(drug => `${drugsStolen[drug]} ${drug}`).join(', ');
-                    modalContent += `<strong>Drugs Stolen:</strong> ${drugList}<br>`;
-                }
-                modalContent += `<br><span style="color: #ff6666;">Your base was successfully raided by rival gangs!</span>`;
-                
-                window.triggerGangAttackNotification(modalContent, 'error');
-            }
-            
-            // Reduce raid activity after successful attack (gangs cool down)
-            if (this.state.data && this.state.data.cityRaidActivity && this.state.data.cityRaidActivity[city]) {
-                this.state.data.cityRaidActivity[city].count = Math.max(0, this.state.data.cityRaidActivity[city].count - 2);
-            }
-            
-        } else {
-            // Gang attack failed - defenders repelled the attack
-            const defenseBonus = Math.floor(baseDefense * 10);
-            this.events.add(`⚔️ Gang attack in ${city} repelled! Your base defenses held strong.`, 'good');
-            this.state.addNotification(`⚔️ Gang attack in ${city} repelled! Your base defenses held strong.`, 'success');
-            
-            // Trigger temporary modal notification for successful defense
-            if (window.triggerGangAttackNotification) {
-                let modalContent = `⚔️ <strong>GANG ATTACK REPELLED!</strong><br><br>`;
-                modalContent += `<strong>Location:</strong> ${city}<br>`;
-                modalContent += `<strong>Base Defense:</strong> ${baseDefense} (${base.assignedGang || 0} gang + ${base.guns || 0} guns)<br>`;
-                modalContent += `<br><span style="color: #66ff66;">Your base defenses held strong against the attack!</span><br>`;
-                modalContent += `<span style="color: #66ccff;">No losses sustained.</span>`;
-                
-                window.triggerGangAttackNotification(modalContent, 'success');
-            }
-            
-            // Reduce raid activity slightly (failed attack still cools down the area)
-            if (this.state.data && this.state.data.cityRaidActivity && this.state.data.cityRaidActivity[city] && this.state.data.cityRaidActivity[city].count > 0) {
-                this.state.data.cityRaidActivity[city].count = Math.max(0, this.state.data.cityRaidActivity[city].count - 1);
-            }
-        }
-    }
 
     /**
      * Generate heat from gang activities.

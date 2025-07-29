@@ -308,14 +308,22 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     }
     
     const limits = getGunLimits(base.level);
-    const value = Math.max(limits.min, Math.min(limits.max, assignGuns[baseId] || getGunLimits(base.level).min));
-    
+    let value = assignGuns[baseId];
+    if (value === undefined) value = base.guns || limits.min;
+    // Clamp to allowed range and available guns
+    const currentGuns = base.guns || 0;
+    const maxAssignable = Math.min(limits.max, currentGuns + availableGuns);
+    if (value > maxAssignable) {
+      alert(`You only have ${availableGuns} guns available. You can assign up to ${maxAssignable} guns to this base.`);
+      value = maxAssignable;
+    }
+    value = Math.max(limits.min, value);
     setPendingGunsAssign({ baseId, value });
   };
 
   const confirmAssignGuns = () => {
     if (!pendingGunsAssign) return;
-    const { baseId, value } = pendingGunsAssign;
+    const { baseId, value: requestedValue } = pendingGunsAssign;
     const allBases: Base[] = Object.values(bases).flatMap((b: Base | Base[]) => b);
     const modalBase = allBases.find((b: Base) => b.id === baseId);
     if (!modalBase) {
@@ -339,6 +347,13 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       return;
     }
     
+    const limits = getGunLimits(base.level);
+    const currentGuns = base.guns || 0;
+    const maxAssignable = Math.min(limits.max, currentGuns + availableGuns);
+    let value = Math.max(limits.min, Math.min(maxAssignable, requestedValue));
+    if (requestedValue > maxAssignable) {
+      alert(`You only have ${availableGuns} guns available. You can assign up to ${maxAssignable} guns to this base.`);
+    }
     const prevAssigned = base.guns || 0;
     const diff = value - prevAssigned;
     const updatedBases = { ...bases };
@@ -348,6 +363,13 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
     // Update guns by city: subtract the difference (guns being assigned to base)
     if (diff !== 0) {
+      // Only subtract if enough guns are available
+      if (diff > 0 && diff > availableGuns) {
+        // Should never happen due to clamping, but double-check
+        alert(`Not enough guns available in city. Assignment cancelled.`);
+        setPendingGunsAssign(null);
+        return;
+      }
       dispatch({ type: 'UPDATE_GUNS_BY_CITY', city: modalCity, amount: -diff });
     }
     setAssignGuns(prev => ({ ...prev, [baseId]: getGunLimits(base.level).min }));
@@ -375,44 +397,69 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       alert(`You must travel to ${modalCity} to collect income from this base.`);
       return;
     }
+
+    // NEW: Check if base has any drugs in inventory
+    const hasDrugs = base.inventory && Object.values(base.inventory).some(amount => amount > 0);
+    if (!hasDrugs) {
+      alert('This base has no drugs in inventory. No income can be collected.');
+      return;
+    }
     
     // Calculate income to collect
     const timeSinceLastCollect = (now - (base.lastCollected || now)) / (1000 * 60 * 60); // hours
     const baseType = baseTypes[String(base.type)];
-    const requiredGang = baseType?.gangRequired || 4;
-    const requiredGuns = baseType?.gunsRequired || 2;
-    const hasEnoughGang = (base.assignedGang || 0) >= requiredGang;
-    const hasEnoughGuns = (base.guns || 0) >= requiredGuns;
-    const drugsInBase = base.inventory ? Object.values(base.inventory).reduce((sum, qty) => sum + qty, 0) : 0;
-    const hasDrugs = drugsInBase > 0;
-    const isOperating = hasEnoughGang && hasEnoughGuns && hasDrugs;
-    
-    if (!isOperating) {
-      alert('Base is not operating. Need gang members, guns, and drugs to generate income.');
-      return;
-    }
-    
-    // Calculate accumulated income (max 24 hours)
     const accumulatedHours = Math.min(timeSinceLastCollect, 24);
     const incomeToCollect = base.income * (base.assignedGang || 0) * accumulatedHours;
+
+    // --- MODIFIED: Allow collection even if over max, but limit new income ---
+    const maxCash = baseType.maxCash || 0;
+    const currentCash = base.cashStored || 0;
     
-    if (incomeToCollect <= 0) {
+    // If base is over the limit, allow collecting the excess amount
+    if (currentCash > maxCash) {
+      const excessAmount = currentCash - maxCash;
+      const collectAmount = Math.min(excessAmount, incomeToCollect);
+      
+      if (collectAmount > 0) {
+        // Add the collected amount to player's cash
+        updateCash(collectAmount);
+        // Update the base's cashStored (reduce it by the collected amount)
+        const updatedBases = { ...bases };
+        updatedBases[modalCity] = cityBasesArr.map((b: Base) =>
+          b.id === baseId ? { ...b, lastCollected: Date.now(), cashStored: currentCash - collectAmount } : b
+        );
+        dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
+        
+        // Add notification
+        addNotification(`Collected $${collectAmount.toLocaleString()} excess cash from ${baseType.name}`, 'success');
+        return;
+      }
+    }
+    
+    // Normal collection logic for bases within limits
+    const spaceLeft = maxCash - currentCash;
+    const actualCollect = Math.max(0, Math.min(incomeToCollect, spaceLeft));
+
+    if (spaceLeft <= 0) {
+      alert('Base cash is at maximum capacity! Collect or spend some before collecting more.');
+      return;
+    }
+    if (actualCollect <= 0) {
       alert('No income available to collect.');
       return;
     }
-    
-    // Add the income to player's cash
-    updateCash(incomeToCollect);
-    
-    // Update the base's lastCollected time
+
+    // Add the income to player's cash and update base's cashStored
+    updateCash(actualCollect);
+    // Update the base's cashStored and lastCollected time
     const updatedBases = { ...bases };
     updatedBases[modalCity] = cityBasesArr.map((b: Base) =>
-      b.id === baseId ? { ...b, lastCollected: Date.now() } : b
+      b.id === baseId ? { ...b, lastCollected: Date.now(), cashStored: (b.cashStored || 0) + actualCollect } : b
     );
     dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
-    
+
     // Add notification
-    addNotification(`Collected $${incomeToCollect.toLocaleString()} from ${baseType.name}`, 'success');
+    addNotification(`Collected $${actualCollect.toLocaleString()} from ${baseType.name}`, 'success');
   };
   
 
@@ -425,14 +472,12 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const requiredGuns = baseType?.gunsRequired || 2;
     const hasEnoughGang = (base.assignedGang || 0) >= requiredGang;
     const hasEnoughGuns = (base.guns || 0) >= requiredGuns;
-    const drugsInBase = base.inventory ? Object.values(base.inventory).reduce((sum, qty) => sum + qty, 0) : 0;
-    const hasDrugs = drugsInBase > 0;
-    const isOperating = hasEnoughGang && hasEnoughGuns && hasDrugs;
+    const isOperating = hasEnoughGang && hasEnoughGuns;
     
     // Calculate accumulated income (max 24 hours)
     const accumulatedHours = Math.min(timeSinceLastCollect, 24);
     const accumulatedIncome = isOperating 
-      ? base.income * (base.assignedGang || 0) * accumulatedHours
+      ? Math.floor(base.income * (base.assignedGang || 0) * accumulatedHours)
       : 0;
     
     return sum + accumulatedIncome;
@@ -685,11 +730,10 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
           const requiredGuns = baseType?.gunsRequired || 2;
           const hasEnoughGang = (base.assignedGang || 0) >= requiredGang;
           const hasEnoughGuns = (base.guns || 0) >= requiredGuns;
-          const drugsInBase = base.inventory ? Object.values(base.inventory).reduce((sum, qty) => sum + qty, 0) : 0;
-          const hasDrugs = drugsInBase > 0;
+          const hasDrugs = base.inventory && Object.values(base.inventory).some(amount => amount > 0);
           const isOperating = hasEnoughGang && hasEnoughGuns && hasDrugs;
           const availableIncome = isOperating
-            ? base.income * (base.assignedGang || 0) * Math.min(timeSinceLastCollect, 24)
+            ? Math.floor(base.income * (base.assignedGang || 0) * Math.min(timeSinceLastCollect, 24))
             : 0;
           return (
             <div key={base.id} style={{
@@ -891,19 +935,23 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                     <input
                       key={`gun-input-${base.id}-${base.level}`}
                       type="number"
-                      value={assignGuns[base.id] || getGunLimits(base.level).min}
-                      onChange={(e) => {
-                        const newValue = Math.max(getGunLimits(base.level).min, Math.min(getMaxGunsAssignable(base), parseInt(e.target.value) || getGunLimits(base.level).min));
-                        setAssignGuns(prev => ({ ...prev, [base.id]: newValue }));
+                      value={assignGuns[base.id] !== undefined ? assignGuns[base.id] : base.guns || getGunLimits(base.level).min}
+                      onChange={e => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val)) val = getGunLimits(base.level).min;
+                        // Clamp between min and max, but allow any value in between
+                        val = Math.max(getGunLimits(base.level).min, Math.min(getMaxGunsAssignable(base), val));
+                        // Only allow up to available guns in city + already assigned to this base
+                        const currentGuns = base.guns || 0;
+                        const maxAssignable = currentGuns + availableGuns;
+                        val = Math.min(val, maxAssignable, getGunLimits(base.level).max);
+                        setAssignGuns(prev => ({ ...prev, [base.id]: val }));
                       }}
                       min={getGunLimits(base.level).min}
                       max={getMaxGunsAssignable(base)}
                       className="quantity-input"
                       placeholder="Total guns"
                       style={{ width: 60 }}
-                      onFocus={() => {
-                        // Removed debug log to prevent flickering
-                      }}
                     />
                     <button
                       className="action-btn"
@@ -923,8 +971,13 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                         handleAssignGuns(base.id);
                       }}
                       disabled={(() => {
-                        const isDisabled = assignGuns[base.id] < getGunLimits(base.level).min || assignGuns[base.id] > getMaxGunsAssignable(base);
-                        return isDisabled;
+                        const val = assignGuns[base.id] !== undefined ? assignGuns[base.id] : base.guns || getGunLimits(base.level).min;
+                        // Only disable if out of range or not enough available guns
+                        return (
+                          val < getGunLimits(base.level).min ||
+                          val > getMaxGunsAssignable(base) ||
+                          val > (base.guns || 0) + availableGuns
+                        );
                       })()}
                       style={{ fontSize: '12px', padding: '8px 12px' }}
                     >

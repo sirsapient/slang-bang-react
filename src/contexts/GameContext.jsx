@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 // import { gameState } from '../game/gameState'; // No longer used for state
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
-import { RaidSystem } from '../game/systems/raid';
+import { PlayerRaidSystem } from '../game/systems/playerRaid';
 import { BaseDefenseSystem } from '../game/systems/baseDefense';
 import { useTutorial } from './TutorialContext';
 
@@ -41,7 +41,7 @@ const initialPricesAndSupply = generateAllCityPricesAndSupply(gameData);
 
 const initialState = {
   playerName: 'Player',
-  cash: 1000000,
+  cash: 5000,
   gangSize: 0,
   warrant: 0,
   day: 1,
@@ -640,102 +640,9 @@ export function GameProvider({ children }) {
       // Debug logging for heat-based retaliation
       console.log(`[HEAT DEBUG] Current city: ${currentCity}, Heat level: ${currentHeatLevel.toFixed(1)}% (warrant: ${warrantHeat.toFixed(1)}, time: ${timeHeat.toFixed(1)})`);
       
-      // Check for gang attacks on bases when heat is 10% or higher
-      if (currentHeatLevel >= 10) {
-        const cityBases = state.bases[currentCity];
-        if (cityBases && Array.isArray(cityBases) && cityBases.length > 0) {
-          // Calculate gang attack chance based on heat level
-          const gangAttackChance = Math.min(0.4, (currentHeatLevel - 10) / 100);
-          
-          console.log(`[HEAT DEBUG] Heat ${currentHeatLevel.toFixed(1)}% >= 10%, checking for gang attack. Chance: ${(gangAttackChance * 100).toFixed(1)}%`);
-          
-          if (Math.random() < gangAttackChance) {
-            console.log(`[HEAT DEBUG] Gang attack triggered!`);
-            // Execute gang attack on the first base in the city
-            const base = cityBases[0];
-            if (base) {
-              // Calculate base defense based on assigned gang and guns
-              const baseDefense = (base.assignedGang || 0) + (base.guns || 0);
-              const baseCash = base.cashStored || 0;
-              const baseInventory = base.inventory || {};
-              
-              // Calculate attack success chance (higher defense = lower success)
-              const attackSuccessChance = Math.max(0.1, 0.8 - (baseDefense * 0.02));
-              const attackSuccessful = Math.random() < attackSuccessChance;
-              
-              console.log(`[HEAT DEBUG] Base defense: ${baseDefense} (${base.assignedGang || 0} gang + ${base.guns || 0} guns), Attack success chance: ${(attackSuccessChance * 100).toFixed(1)}%`);
-              
-              if (attackSuccessful) {
-                // Gang attack successful - steal cash and drugs
-                const cashStolen = Math.floor(baseCash * (0.3 + Math.random() * 0.4)); // 30-70% of cash
-                const drugsStolen = {};
-                
-                Object.keys(baseInventory).forEach(drug => {
-                  const amount = baseInventory[drug] || 0;
-                  const stolen = Math.floor(amount * (0.2 + Math.random() * 0.6)); // 20-80% of drugs
-                  if (stolen > 0) {
-                    drugsStolen[drug] = stolen;
-                    base.inventory[drug] = Math.max(0, amount - stolen);
-                  }
-                });
-                
-                // Update base cash
-                base.cashStored = Math.max(0, baseCash - cashStolen);
-                
-                // Create attack message
-                let attackMessage = `⚔️ Gang attack on your base in ${currentCity}! Lost $${cashStolen.toLocaleString()} cash`;
-                if (Object.keys(drugsStolen).length > 0) {
-                  const drugList = Object.keys(drugsStolen).map(drug => `${drugsStolen[drug]} ${drug}`).join(', ');
-                  attackMessage += ` and ${drugList}`;
-                }
-                
-                console.log(`[HEAT DEBUG] Gang attack successful! Stolen: $${cashStolen} cash, ${Object.keys(drugsStolen).length} drug types`);
-                addNotification(attackMessage, 'error');
-                
-                // Trigger temporary modal notification for successful gang attack
-                if (window.triggerGangAttackNotification) {
-                  let modalContent = `⚔️ <strong>GANG ATTACK!</strong><br><br>`;
-                  modalContent += `<strong>Location:</strong> ${currentCity}<br>`;
-                  modalContent += `<strong>Cash Stolen:</strong> $${cashStolen.toLocaleString()}<br>`;
-                  if (Object.keys(drugsStolen).length > 0) {
-                    const drugList = Object.keys(drugsStolen).map(drug => `${drugsStolen[drug]} ${drug}`).join(', ');
-                    modalContent += `<strong>Drugs Stolen:</strong> ${drugList}<br>`;
-                  }
-                  modalContent += `<br><span style="color: #ff6666;">Your base was successfully raided by rival gangs!</span>`;
-                  
-                  window.triggerGangAttackNotification(modalContent, 'error');
-                }
-                
-              } else {
-                // Gang attack failed - defenders repelled the attack
-                console.log(`[HEAT DEBUG] Gang attack failed - base defended successfully`);
-                addNotification(`⚔️ Gang attack in ${currentCity} repelled! Your base defenses held strong.`, 'success');
-                
-                // Trigger temporary modal notification for successful defense
-                if (window.triggerGangAttackNotification) {
-                  let modalContent = `⚔️ <strong>GANG ATTACK REPELLED!</strong><br><br>`;
-                  modalContent += `<strong>Location:</strong> ${currentCity}<br>`;
-                  modalContent += `<strong>Base Defense:</strong> ${baseDefense} (${base.assignedGang || 0} gang + ${base.guns || 0} guns)<br>`;
-                  modalContent += `<br><span style="color: #66ff66;">Your base defenses held strong against the attack!</span><br>`;
-                  modalContent += `<span style="color: #66ccff;">No losses sustained.</span>`;
-                  
-                  window.triggerGangAttackNotification(modalContent, 'success');
-                }
-              }
-              
-              // Update the base in state
-              dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
-            }
-          } else {
-            console.log(`[HEAT DEBUG] Gang attack check failed (${(gangAttackChance * 100).toFixed(1)}% chance)`);
-          }
-        } else {
-          console.log(`[HEAT DEBUG] No bases in ${currentCity} to attack`);
-        }
-      } else {
-        console.log(`[HEAT DEBUG] Heat ${currentHeatLevel.toFixed(1)}% < 10%, no gang attack check`);
-      }
-
+      // OLD GANG ATTACK SYSTEM REMOVED - Now using new BaseDefenseSystem with priority-based losses
+      // The new system destroys guns/gangs first before taking drugs/cash
+      
       // --- Base Raid Checking (existing raid activity based) ---
       // Check for base raids based on raid activity
       const cityRaidActivity = state.cityRaidActivity?.[currentCity];
@@ -1291,7 +1198,7 @@ export function GameProvider({ children }) {
           });
         },
       };
-      raidSystemRef.current = new RaidSystem(raidState, events, gameData);
+      raidSystemRef.current = new PlayerRaidSystem(raidState, events, gameData);
       console.log('[RAID DEBUG] RaidSystem initialized');
       
       // Initialize BaseDefenseSystem

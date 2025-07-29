@@ -214,23 +214,23 @@ export class BaseDefenseSystem {
         // Remove gang members
         if (losses.gangLost > 0) {
             base.assignedGang = Math.max(0, (base.assignedGang || 0) - losses.gangLost);
-            // Also remove from city gang count
-            const city = base.city;
-            const currentCityGang = this.state.getGangMembersInCity ? this.state.getGangMembersInCity(city) : 0;
-            if (this.state.updateGangMembersInCity) {
-                this.state.updateGangMembersInCity(city, currentCityGang - losses.gangLost);
-            }
+            // Do NOT update city gang count here
+            // const city = base.city;
+            // const currentCityGang = this.state.getGangMembersInCity ? this.state.getGangMembersInCity(city) : 0;
+            // if (this.state.updateGangMembersInCity) {
+            //     this.state.updateGangMembersInCity(city, currentCityGang - losses.gangLost);
+            // }
         }
 
         // Remove guns
         if (losses.gunsLost > 0) {
             base.guns = Math.max(0, (base.guns || 0) - losses.gunsLost);
-            // Also remove from city gun count
-            const city = base.city;
-            const currentCityGuns = this.state.getGunsInCity ? this.state.getGunsInCity(city) : 0;
-            if (this.state.updateGunsInCity) {
-                this.state.updateGunsInCity(city, currentCityGuns - losses.gunsLost);
-            }
+            // Do NOT update city gun count here
+            // const city = base.city;
+            // const currentCityGuns = this.state.getGunsInCity ? this.state.getGunsInCity(city) : 0;
+            // if (this.state.updateGunsInCity) {
+            //     this.state.updateGunsInCity(city, currentCityGuns - losses.gunsLost);
+            // }
         }
 
         // Remove drugs (only if gang members are zero)
@@ -275,20 +275,27 @@ export class BaseDefenseSystem {
         if (isSuccessful) {
             let message = `🔥 Your ${baseName} in ${base.city} was successfully raided by ${enemyGangSize} enemies with ${enemyGuns} guns!`;
             
-            if (losses.gangLost > 0) {
-                message += ` Lost ${losses.gangLost} gang members`;
-            }
-            if (losses.gunsLost > 0) {
-                message += ` and ${losses.gunsLost} guns`;
+            // Report gang and gun losses first (priority-based system)
+            if (losses.gangLost > 0 || losses.gunsLost > 0) {
+                message += ` Destroyed:`;
+                if (losses.gangLost > 0) {
+                    message += ` ${losses.gangLost} gang members`;
+                }
+                if (losses.gunsLost > 0) {
+                    message += losses.gangLost > 0 ? ` and ${losses.gunsLost} guns` : ` ${losses.gunsLost} guns`;
+                }
             }
             
-            if (Object.keys(losses.drugsLost).length > 0) {
-                const drugList = Object.keys(losses.drugsLost).map(drug => `${losses.drugsLost[drug]} ${drug}`).join(', ');
-                message += `. Stolen drugs: ${drugList}`;
-            }
-            
-            if (losses.cashLost > 0) {
-                message += `. Stolen cash: $${losses.cashLost.toLocaleString()}`;
+            // Report drug and cash losses (only taken after gang/guns destroyed)
+            if (Object.keys(losses.drugsLost).length > 0 || losses.cashLost > 0) {
+                message += `. Stolen:`;
+                if (Object.keys(losses.drugsLost).length > 0) {
+                    const drugList = Object.keys(losses.drugsLost).map(drug => `${losses.drugsLost[drug]} ${drug}`).join(', ');
+                    message += ` ${drugList}`;
+                }
+                if (losses.cashLost > 0) {
+                    message += Object.keys(losses.drugsLost).length > 0 ? ` and $${losses.cashLost.toLocaleString()} cash` : ` $${losses.cashLost.toLocaleString()} cash`;
+                }
             }
             
             return message;
