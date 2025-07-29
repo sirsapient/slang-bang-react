@@ -1,7 +1,7 @@
 // src/screens/AssetsScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { useGame, useCash, useCurrentCity } from '../contexts/GameContext.jsx';
-import { useTutorial } from '../contexts/TutorialContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext';
 import { Modal } from '../components/Modal';
 import { gameData } from '../game/data/gameData';
 import type { Asset, AssetInstance } from '../game/data/gameData-types';
@@ -187,95 +187,6 @@ export default function AssetsScreen({ onNavigate }: AssetsScreenProps) {
         </button>
         <h3>💎 Asset Store</h3>
         <div style={{ fontSize: '12px', color: '#aaa' }}>Build Your Empire</div>
-        {/* Debug buttons for testing */}
-        <button 
-          onClick={() => {
-            console.log('Manual jewelry tutorial start');
-            startTutorial('assetsJewelryTutorial');
-          }}
-          style={{ 
-            position: 'absolute', 
-            right: '10px', 
-            top: '10px', 
-            background: '#ffaa00', 
-            color: '#222', 
-            fontSize: '10px',
-            padding: '4px 8px'
-          }}
-        >
-          Debug: Start Jewelry Tutorial
-        </button>
-        <button 
-          onClick={() => {
-            console.log('Reset jewelry tutorial progress');
-            // Reset the jewelry tutorial progress
-            localStorage.setItem('tutorialProgress', JSON.stringify({
-              gettingStarted: true,
-              assetsTutorial: true,
-              assetsJewelryTutorial: false,
-              firstBase: false,
-              firstRaid: false
-            }));
-            window.location.reload();
-          }}
-          style={{ 
-            position: 'absolute', 
-            right: '10px', 
-            top: '30px', 
-            background: '#ff6666', 
-            color: '#fff', 
-            fontSize: '10px',
-            padding: '4px 8px'
-          }}
-        >
-          Debug: Reset Jewelry Tutorial
-        </button>
-        <button 
-          onClick={() => {
-            console.log('Manual advance jewelry tutorial');
-            if (activeTutorial === 'assetsJewelryTutorial') {
-              nextStep();
-            }
-          }}
-          style={{ 
-            position: 'absolute', 
-            right: '10px', 
-            top: '50px', 
-            background: '#66ff66', 
-            color: '#222', 
-            fontSize: '10px',
-            padding: '4px 8px'
-          }}
-        >
-          Debug: Advance Tutorial
-        </button>
-        <button 
-          onClick={() => {
-            console.log('Force jewelry tab active');
-            setActiveTab('jewelry');
-            // Check for silver chain button after a delay
-            setTimeout(() => {
-              const silverChainButton = document.getElementById('silver-chain-purchase');
-              console.log('Silver chain button after forcing jewelry tab:', silverChainButton);
-              if (silverChainButton) {
-                console.log('Silver chain button found!');
-                silverChainButton.style.border = '3px solid #ffaa00';
-                silverChainButton.style.boxShadow = '0 0 10px rgba(255, 170, 0, 0.5)';
-              }
-            }, 100);
-          }}
-          style={{ 
-            position: 'absolute', 
-            right: '10px', 
-            top: '70px', 
-            background: '#ffaa00', 
-            color: '#222', 
-            fontSize: '10px',
-            padding: '4px 8px'
-          }}
-        >
-          Debug: Force Jewelry Tab
-        </button>
       </div>
       {/* --- NEW: Active Jewelry Display --- */}
       {wornJewelry.length > 0 && (

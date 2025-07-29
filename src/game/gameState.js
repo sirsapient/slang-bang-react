@@ -201,10 +201,18 @@ export class GameState {
         const totalInCity = this.getGangMembersInCity(city);
         let assignedInCity = 0;
         
-        // Check if there's a base in this city
-        const base = this.getBase(city);
-        if (base) {
-            assignedInCity = base.assignedGang || 0;
+        // Check all bases in this city (support multiple bases per city)
+        const cityBases = this.data.bases[city];
+        if (cityBases) {
+            if (Array.isArray(cityBases)) {
+                // Multiple bases in city
+                cityBases.forEach(base => {
+                    assignedInCity += base.assignedGang || 0;
+                });
+            } else {
+                // Single base in city
+                assignedInCity = cityBases.assignedGang || 0;
+            }
         }
         
         const available = Math.max(0, totalInCity - assignedInCity);
@@ -212,7 +220,7 @@ export class GameState {
         // Debug logging for Austin
         if (city === 'Austin') {
             console.log(`[DEBUG] Austin gang members: total=${totalInCity}, assigned=${assignedInCity}, available=${available}`);
-            console.log(`[DEBUG] Austin base:`, base);
+            console.log(`[DEBUG] Austin base:`, cityBases);
             console.log(`[DEBUG] All gang members:`, this.data.gangMembers);
         }
         
@@ -268,10 +276,18 @@ export class GameState {
         const totalInCity = this.getGunsInCity(city);
         let assignedInCity = 0;
         
-        // Check if there's a base in this city
-        const base = this.getBase(city);
-        if (base) {
-            assignedInCity = base.guns || 0;
+        // Check all bases in this city (support multiple bases per city)
+        const cityBases = this.data.bases[city];
+        if (cityBases) {
+            if (Array.isArray(cityBases)) {
+                // Multiple bases in city
+                cityBases.forEach(base => {
+                    assignedInCity += base.guns || 0;
+                });
+            } else {
+                // Single base in city
+                assignedInCity = cityBases.guns || 0;
+            }
         }
         
         return Math.max(0, totalInCity - assignedInCity);
@@ -299,8 +315,16 @@ export class GameState {
     
     getAvailableGangMembers() {
         let assignedGang = 0;
-        Object.values(this.data.bases).forEach(base => {
-            assignedGang += base.assignedGang || 0;
+        Object.values(this.data.bases).forEach(cityBases => {
+            if (Array.isArray(cityBases)) {
+                // Multiple bases in city
+                cityBases.forEach(base => {
+                    assignedGang += base.assignedGang || 0;
+                });
+            } else {
+                // Single base in city
+                assignedGang += cityBases.assignedGang || 0;
+            }
         });
         return Math.max(0, this.data.gangSize - assignedGang);
     }
@@ -663,6 +687,10 @@ export class GameState {
             }
         });
     }
+
+    // --- Base Raid System (REMOVED - now integrated into heat system) ---
+    // The old checkForBaseRaids() and executeBaseRaid() methods have been removed
+    // Gang retaliation is now handled by the heat system in heat.js
 }
 
 /**

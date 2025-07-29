@@ -91,11 +91,32 @@ export class AssetDropSystem {
         // Show consolidated popup notification if player is in the same city
         const currentCity = this.state.get('currentCity');
         if (currentCity === city) {
-            // Use setTimeout to ensure the popup appears after the current execution
-            setTimeout(() => {
-                this.showConsolidatedDropNotification(city);
-            }, 100);
+            this.state.addNotification(`🎉 New drop available in ${city}: ${template.name}`, 'success');
         }
+    }
+    
+    getRandomTemplates(city, count = 1) {
+        // Filter assets by city availability or create city-specific templates
+        const availableAssets = this.data.assets.filter(asset => {
+            // For now, all assets are available in all cities
+            // You could add city-specific asset availability here
+            return asset.type === 'jewelry' || asset.type === 'car';
+        });
+        
+        const templates = [];
+        const usedIndices = new Set();
+        
+        for (let i = 0; i < count && i < availableAssets.length; i++) {
+            let index;
+            do {
+                index = Math.floor(Math.random() * availableAssets.length);
+            } while (usedIndices.has(index));
+            
+            usedIndices.add(index);
+            templates.push(availableAssets[index]);
+        }
+        
+        return templates;
     }
     
     getCityDrops(city) {
@@ -103,26 +124,11 @@ export class AssetDropSystem {
             .filter(drop => drop.city === city && !drop.isExpired);
     }
     
-    getRandomTemplates(city, count = 1) {
-        // Get asset templates based on city preferences
-        const allTemplates = this.data.assets;
-        
-        // For now, return random templates
-        const shuffled = [...allTemplates].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, count);
-    }
-    
     calculateDynamicPrice(drop) {
-        // Price increases as supply decreases
-        const soldPercentage = (drop.totalSupply - drop.remaining) / drop.totalSupply;
-        let priceMultiplier = 1;
-        
-        if (soldPercentage > 0.9) priceMultiplier = 3.0;      // Last 10%
-        else if (soldPercentage > 0.75) priceMultiplier = 2.0; // Last 25%
-        else if (soldPercentage > 0.5) priceMultiplier = 1.5;  // Last 50%
-        else if (soldPercentage > 0.25) priceMultiplier = 1.2; // Last 75%
-        
-        return Math.floor(drop.baseCost * priceMultiplier);
+        const basePrice = drop.baseCost;
+        const remainingRatio = drop.remaining / drop.totalSupply;
+        const demandMultiplier = 1 + (1 - remainingRatio) * 0.5; // Price increases as supply decreases
+        return Math.floor(basePrice * demandMultiplier);
     }
     
     purchaseExclusiveDrop(dropId) {
@@ -177,24 +183,30 @@ export class AssetDropSystem {
             cityPurchased: drop.city
         };
         
-        // Add to owned assets
+        // Add to owned assets using the new city-based structure
         if (!this.state.data.assets) {
             this.state.data.assets = { owned: {}, wearing: { jewelry: [] } };
         }
-        this.state.data.assets.owned[assetData.id] = assetData;
         
-        // Event messages
-        this.events.add(`💎 Purchased exclusive ${drop.name} for $${price.toLocaleString()}`, 'good');
-        
-        if (drop.remaining < 10) {
-            this.events.add(`⚠️ Only ${drop.remaining} ${drop.name} left in ${drop.city}!`, 'neutral');
+        // Initialize city structure if it doesn't exist
+        if (!this.state.data.assets.owned[drop.city]) {
+            this.state.data.assets.owned[drop.city] = {};
         }
         
-        if (drop.remaining === 0) {
-            this.events.add(`🔥 ${drop.name} is now SOLD OUT in ${drop.city}!`, 'bad');
+        // Initialize array for this asset type if it doesn't exist
+        if (!this.state.data.assets.owned[drop.city][assetData.id]) {
+            this.state.data.assets.owned[drop.city][assetData.id] = [];
         }
         
-        return { success: true, asset: assetData };
+        // Add the new asset instance
+        this.state.data.assets.owned[drop.city][assetData.id].push({
+            ...assetData,
+            instanceId: assetData.id,
+            city: drop.city // Store which city this asset is in
+        });
+        
+        this.events.add(`🎉 Purchased exclusive ${drop.name} from ${drop.city} for ${price.toLocaleString()}`, 'good');
+        return { success: true };
     }
     
     cleanExpiredDrops(city) {

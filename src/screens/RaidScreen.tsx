@@ -1,6 +1,7 @@
 // src/screens/RaidScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { useGame, useCurrentCity } from '../contexts/GameContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext';
 import { Modal } from '../components/Modal';
 import { gameData } from '../game/data/gameData';
 
@@ -19,7 +20,9 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
     calculateRaidSuccess,
     getDifficultyColor,
     getDifficultyText,
+    state,
   } = useGame();
+  const { activeTutorial, stepIndex, tutorialSteps, nextStep, startTutorial, progress } = useTutorial();
   const currentCity = useCurrentCity();
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [raidGangSize, setRaidGangSize] = useState(3);
@@ -40,6 +43,32 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
     }
   }, [selectedTarget, availableGangInCity]);
 
+  // Check if we should start the base raids tutorial
+  useEffect(() => {
+    // Only start tutorial if:
+    // 1. Tutorial hasn't been completed
+    // 2. No tutorial is currently active
+    // 3. Player has at least 3 gang members and 3 guns in current city
+    // 4. Player has a base in the current city (required for raiding)
+    if (!progress.baseRaidsTutorial && 
+        !activeTutorial && 
+        availableGangInCity >= 3 && 
+        availableGunsInCity >= 3) {
+      
+      // Check if player has a base in current city
+      const hasBaseInCity = () => {
+        const bases = state.bases || {};
+        const cityBases = bases[currentCity] || [];
+        return cityBases.length > 0;
+      };
+      
+      if (hasBaseInCity()) {
+        console.log('Starting base raids tutorial - requirements met');
+        startTutorial('baseRaidsTutorial');
+      }
+    }
+  }, [progress.baseRaidsTutorial, activeTutorial, availableGangInCity, availableGunsInCity, currentCity, startTutorial]);
+
   const handleTargetSelect = (targetId: string) => {
     setSelectedTarget(targetId);
   };
@@ -54,6 +83,8 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
       } else if (result.success !== undefined) {
         setRaidResult(result);
         setShowResults(true);
+        
+
       } else if (result.error) {
         // handle other errors if needed
       }
@@ -114,6 +145,11 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
           <div style={{ fontSize: '18px', color: '#66ff66', fontWeight: 'bold' }}>
             {availableGunsInCity}
           </div>
+          {availableGunsInCity === 0 && (
+            <div style={{ fontSize: '10px', color: '#ffaa00', marginTop: '2px' }}>
+              💡 Assign guns to bases first!
+            </div>
+          )}
         </div>
         <div>
           <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '5px' }}>
@@ -137,8 +173,9 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
         <h3>⚔️ Base Raids</h3>
         <div style={{ fontSize: '12px', color: '#aaa' }}>Attack Enemy Bases</div>
       </div>
+      
       {renderInventorySummary()}
-      {availableGangInCity < 3 ? (
+      {availableGangInCity < 3 || availableGunsInCity < 3 ? (
         <div style={{
           background: '#222',
           border: '1px solid #444',
@@ -149,13 +186,16 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
         }}>
           <div style={{ fontSize: '48px', marginBottom: '15px' }}>⚔️</div>
           <div style={{ fontSize: '16px', color: '#aaa', marginBottom: '10px' }}>
-            Insufficient Gang Members
+            Insufficient Resources
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>
-            You need at least 3 unassigned gang members in {currentCity} to conduct raids
+            You need at least 3 unassigned gang members AND 3 guns in {currentCity} to conduct raids
           </div>
           <div style={{ fontSize: '11px', color: '#888' }}>
-            💡 Tip: Recruit more gang members and keep them unassigned for raids
+            💡 Tip: Recruit more gang members and buy guns, then keep them unassigned for raids
+          </div>
+          <div style={{ fontSize: '11px', color: '#888', marginTop: '10px' }}>
+            Gang Members: {availableGangInCity}/3 | Guns: {availableGunsInCity}/3
           </div>
         </div>
       ) : (
@@ -209,9 +249,17 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
     const timeSinceLastRaid = currentTime - target.lastRaid;
     const isOnCooldown = isRaidTargetOnCooldown(target);
     const remainingMinutes = isOnCooldown ? Math.ceil((cooldownPeriod - timeSinceLastRaid) / 1000 / 60) : 0;
+    
+    console.log('[UI DEBUG] Target card render for:', target.id);
+    console.log('[UI DEBUG] Current time:', currentTime);
+    console.log('[UI DEBUG] Last raid time:', target.lastRaid);
+    console.log('[UI DEBUG] Time since last raid:', timeSinceLastRaid);
+    console.log('[UI DEBUG] Is on cooldown:', isOnCooldown);
+    console.log('[UI DEBUG] Remaining minutes:', remainingMinutes);
     return (
       <div
         key={target.id}
+        id="raid-target"
         className="raid-target"
         style={{
           background: '#222',
@@ -372,6 +420,60 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             </div>
           </div>
         </div>
+        {/* Risk Assessment */}
+        <div style={{
+          background: '#331100',
+          border: '1px solid #663300',
+          borderRadius: '8px',
+          padding: '10px',
+          marginBottom: '15px'
+        }}>
+          <div style={{ fontSize: '11px', color: '#ffaa00', marginBottom: '8px' }}>
+            ⚠️ Risk Assessment
+          </div>
+          <div style={{ fontSize: '10px', color: '#ffccaa' }}>
+            <div style={{ marginBottom: '5px' }}>
+              <strong>Every raid has risks:</strong>
+            </div>
+            <div style={{ marginBottom: '3px' }}>
+              • <span style={{ color: '#66ff66' }}>Success:</span> 5-20% chance of losses (based on difficulty)
+            </div>
+            <div style={{ marginBottom: '3px' }}>
+              • <span style={{ color: '#ff6666' }}>Failure:</span> 15-50% chance of losses (based on difficulty)
+            </div>
+            <div style={{ marginBottom: '3px' }}>
+              • <span style={{ color: '#ffaa00' }}>Difficulty:</span> Higher difficulty = higher risk & severity
+            </div>
+            <div style={{ fontSize: '9px', color: '#ffaaaa', marginTop: '5px' }}>
+              You may lose gang members and guns on any raid attempt!
+            </div>
+          </div>
+        </div>
+        {/* Heat Penalty Warning */}
+        {(() => {
+          const cityRaidActivity = state.getCityRaidActivity?.(currentCity) || { count: 0 };
+          const raidCount = cityRaidActivity.count;
+          if (raidCount > 0) {
+            return (
+              <div style={{
+                background: '#220000',
+                border: '1px solid #660000',
+                borderRadius: '8px',
+                padding: '10px',
+                marginBottom: '15px'
+              }}>
+                <div style={{ fontSize: '11px', color: '#ff6666', marginBottom: '5px' }}>
+                  ⚠️ Heat Penalty Warning
+                </div>
+                <div style={{ fontSize: '10px', color: '#ffaaaa' }}>
+                  You've raided {raidCount} time{raidCount > 1 ? 's' : ''} in {currentCity}. 
+                  Heat penalty: +{raidCount * 10}% per raid.
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
         {/* Validation Warnings */}
         {!hasEnoughGuns && (
           <div style={{
@@ -389,6 +491,7 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
         )}
         {/* Execute Raid */}
         <button
+          id="execute-raid-button"
           onClick={handleExecuteRaid}
           className="action-btn"
           style={{
@@ -433,6 +536,16 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             <div style={{ fontSize: '14px', color: '#aaffaa' }}>
               Looted ${cash.toLocaleString()} and drugs
             </div>
+            {raidResult.baseDamage && (
+              <div style={{ fontSize: '12px', color: '#ffaa00', marginTop: '8px' }}>
+                💥 Base damaged: ${raidResult.baseDamage.toLocaleString()}
+              </div>
+            )}
+            {raidResult.losses && (raidResult.losses.gangLost > 0 || raidResult.losses.gunsLost > 0) && (
+              <div style={{ fontSize: '12px', color: '#ff6666', marginTop: '8px' }}>
+                💀 Lost {raidResult.losses.gangLost} gang members and {raidResult.losses.gunsLost} guns
+              </div>
+            )}
           </div>
           <div style={{
             background: '#222',
@@ -456,9 +569,16 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             borderRadius: '8px',
             padding: '15px'
           }}>
-            <div style={{ fontSize: '12px', color: '#ff6666' }}>
+            <div style={{ fontSize: '12px', color: '#ff6666', marginBottom: '8px' }}>
               🔥 Heat increased by {heatIncrease.toLocaleString()}
             </div>
+            {raidResult.heatBreakdown && (
+              <div style={{ fontSize: '10px', color: '#ffaaaa' }}>
+                <div>Base heat: {raidResult.heatBreakdown.baseHeat.toLocaleString()}</div>
+                <div>Difficulty multiplier: {raidResult.heatBreakdown.difficultyMultiplier?.toFixed(2)}x</div>
+                <div>Activity penalty: +{raidResult.heatBreakdown.activityPenalty.toLocaleString()} ({raidResult.heatBreakdown.raidCount} raids in city)</div>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -486,6 +606,16 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             <div style={{ fontSize: '14px', color: '#ffaaaa' }}>
               Your gang was defeated
             </div>
+            {raidResult.baseDamage && (
+              <div style={{ fontSize: '12px', color: '#ffaa00', marginTop: '8px' }}>
+                💥 Base damaged: ${raidResult.baseDamage.toLocaleString()}
+              </div>
+            )}
+            {raidResult.losses && (raidResult.losses.gangLost > 0 || raidResult.losses.gunsLost > 0) && (
+              <div style={{ fontSize: '12px', color: '#ff6666', marginTop: '8px' }}>
+                💀 Lost {raidResult.losses.gangLost} gang members and {raidResult.losses.gunsLost} guns
+              </div>
+            )}
           </div>
           <div style={{
             background: '#220000',
@@ -493,9 +623,16 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
             borderRadius: '8px',
             padding: '15px'
           }}>
-            <div style={{ fontSize: '12px', color: '#ff6666' }}>
+            <div style={{ fontSize: '12px', color: '#ff6666', marginBottom: '8px' }}>
               🔥 Heat increased by {heatIncrease.toLocaleString()}
             </div>
+            {raidResult.heatBreakdown && (
+              <div style={{ fontSize: '10px', color: '#ffaaaa' }}>
+                <div>Base heat: {raidResult.heatBreakdown.baseHeat.toLocaleString()}</div>
+                <div>Difficulty multiplier: {raidResult.heatBreakdown.difficultyMultiplier?.toFixed(2)}x</div>
+                <div>Activity penalty: +{raidResult.heatBreakdown.activityPenalty.toLocaleString()} ({raidResult.heatBreakdown.raidCount} raids in city)</div>
+              </div>
+            )}
           </div>
         </div>
       );

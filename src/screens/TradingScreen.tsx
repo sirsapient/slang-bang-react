@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGame } from '../contexts/GameContext.jsx';
-import { useTutorial } from '../contexts/TutorialContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext';
 import { Modal } from '../components/Modal';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
@@ -346,7 +346,7 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
             Sell all drugs for <strong>${sellAllSummary.total.toLocaleString()}</strong>?<br/>
             <span style={{ fontSize: '12px', color: '#aaa' }}>{sellAllSummary.drugs.join(', ')}</span>
           </p>
-          <button className="action-btn" onClick={() => { console.log('[DEBUG] Sell All modal confirm button clicked'); confirmSellAll(); }}>
+                          <button className="action-btn" onClick={() => { confirmSellAll(); }}>
             Confirm
           </button>
           <button className="action-btn" style={{ background: '#ff6666' }} onClick={() => setShowSellAllModal(false)}>

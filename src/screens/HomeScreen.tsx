@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame, useCash, useCurrentCity } from '../contexts/GameContext.jsx';
-import { useTutorial } from '../contexts/TutorialContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext';
 import { Modal } from '../components/Modal';
 import { PlayerCard } from '../components/PlayerCard';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
+import HeatBreakdown from '../components/HeatBreakdown';
+import BaseDefenseTest from '../components/BaseDefenseTest';
 
 interface HomeScreenProps {
   onNavigate: (screen: string) => void;
@@ -49,7 +51,8 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [pendingGunPurchase, setPendingGunPurchase] = useState<PendingPurchase>({ qty: 0, cost: 0 });
   const [pendingGangRecruit, setPendingGangRecruit] = useState<PendingPurchase>({ qty: 0, cost: 0 });
   const [showRaidRequirementModal, setShowRaidRequirementModal] = useState(false);
-
+  const [showHeatDetails, setShowHeatDetails] = useState(false);
+  const [showBaseDefenseTest, setShowBaseDefenseTest] = useState(false);
 
 
   const cityData = gameData.cities[currentCity] || {};
@@ -93,79 +96,16 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   // Remove handleBribery and systems.heat references
 
   const apps = [
-    { id: 'quickBuy', icon: '🛒', name: 'Quick Buy', onClick: () => setShowQuickBuyModal(true) },
-    { id: 'bases', icon: '🏢', name: 'Manage Bases', onClick: () => onNavigate('bases') },
-    { id: 'gang', icon: '👥', name: 'Manage Gang', onClick: () => onNavigate('gang') },
-    { 
-      id: 'raid', 
-      icon: '⚔️', 
-      name: 'Raid Bases', 
-      onClick: () => {
-        // Check if player has a base in current city
-        if (!hasBaseInCity(currentCity)) {
-          setShowRaidRequirementModal(true);
-          return;
-        }
-        onNavigate('raid');
-      },
-      disabled: !hasBaseInCity(currentCity),
-      disabledMessage: `Requires base in ${currentCity}`
-    },
-    { 
-      id: 'market', 
-      icon: '💊', 
-      name: 'Market', 
-      onClick: () => {
-        // Check if this is a tutorial click
-        if (activeTutorial === 'gettingStarted' && stepIndex === 1) {
-          const step = tutorialSteps[activeTutorial][stepIndex];
-          if (step && step.requireClick) {
-            nextStep();
-          }
-        }
-        onNavigate('market');
-      },
-      elementId: 'market-button'
-    },
-    { 
-      id: 'trading', 
-      icon: '💼', 
-      name: 'Trading', 
-      onClick: () => {
-        console.log('Trading button clicked');
-        console.log('Current tutorial state:', { activeTutorial, stepIndex });
-        // Check if this is a tutorial click for Trading button
-        if (activeTutorial === 'gettingStarted' && stepIndex === 10) {
-          console.log('Tutorial condition met, calling nextStep');
-          const step = tutorialSteps[activeTutorial][stepIndex];
-          if (step && step.requireClick) {
-            console.log('Calling nextStep from Trading button click');
-            nextStep();
-          }
-        }
-        console.log('Navigating to trading screen');
-        onNavigate('trading');
-      },
-      elementId: 'trading-button'
-    },
     { id: 'travel', icon: '✈️', name: 'Travel', onClick: () => onNavigate('travel') },
+    { id: 'market', icon: '💊', name: 'Market', onClick: () => onNavigate('market'), elementId: 'market-button' },
+    { id: 'trading', icon: '💼', name: 'Trading', onClick: () => onNavigate('trading'), elementId: 'trading-button' },
+    { id: 'quickBuy', icon: '🛒', name: 'Quick Buy', onClick: () => setShowQuickBuyModal(true) },
+    { id: 'raid', icon: '⚔️', name: 'Base Raids', onClick: () => onNavigate('raid'), needsBase: !hasBaseInCity(currentCity) },
+    { id: 'bases', icon: '🏢', name: 'Manage Bases', onClick: () => onNavigate('bases') },
+    { id: 'gang', icon: '👥', name: 'Gang Management', onClick: () => onNavigate('gang') },
+    { id: 'assets', icon: '💎', name: 'Assets', onClick: () => onNavigate('assets'), elementId: 'assets-button' },
     { id: 'inventory', icon: '🎒', name: 'Inventory', onClick: () => onNavigate('inventory') },
-    { 
-      id: 'assets', 
-      icon: '💎', 
-      name: 'Assets', 
-      onClick: () => {
-        // Check if we should start the assets tutorial
-        if (progress.gettingStarted && !progress.assetsTutorial && state.cash >= 20000) {
-          console.log('Starting assets tutorial from Asset button click');
-          startTutorial('assetsTutorial');
-        }
-        onNavigate('assets');
-      },
-      elementId: 'assets-button'
-    },
-    { id: 'ranking', icon: '🏆', name: 'Ranking', onClick: () => setShowRankingModal(true) },
-    { id: 'mail', icon: '📧', name: 'Mail', onClick: () => onNavigate('mail') }
+    { id: 'mail', icon: '📧', name: 'Mail', onClick: () => onNavigate('mail') },
   ];
 
   // Add Settings to the apps array
@@ -216,41 +156,69 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           </button>
         </div>
       )}
+
+      {/* Heat Breakdown */}
+      <HeatBreakdown showDetails={false} />
+      
+      {/* Heat Details Button */}
+      <button
+        className="action-btn"
+        onClick={() => setShowHeatDetails(true)}
+        style={{ 
+          width: '100%', 
+          marginBottom: '15px',
+          background: '#333',
+          border: '1px solid #555'
+        }}
+      >
+        🔍 View Heat Details
+      </button>
+
       {/* App Grid */}
       <div className="app-grid">
         {appsWithSettings.map(app => {
-          const isDisabled = app.disabled;
+          // Only for Raid Bases, show a visual cue if not qualified
+          const showWarning = app.id === 'raid' && app.needsBase;
           return (
             <button
               key={app.id}
               id={app.elementId || app.id}
-              className={`app-icon${isDisabled ? ' disabled' : ''}`}
-              onClick={isDisabled ? undefined : app.onClick}
+              className={`app-icon${showWarning ? ' raid-warning' : ''}`}
+              onClick={app.onClick}
               style={{ 
                 minWidth: 80,
-                opacity: isDisabled ? 0.5 : 1,
-                cursor: isDisabled ? 'not-allowed' : 'pointer',
-                position: 'relative'
+                // If warning, highlight border and maybe pulse
+                border: showWarning ? '2px solid #ffcc00' : undefined,
+                boxShadow: showWarning ? '0 0 8px 2px #ffcc00' : undefined,
+                position: 'relative',
+                opacity: 1,
+                cursor: 'pointer',
               }}
-              title={isDisabled ? app.disabledMessage : undefined}
+              title={showWarning ? `Requires base in ${currentCity}` : undefined}
             >
               <div style={{ fontSize: 32 }}>{app.icon}</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>{app.name}</div>
-              {isDisabled && (
+              {/* Visual cue for Raid Bases if not qualified */}
+              {showWarning && (
                 <div style={{
                   position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  background: 'rgba(0,0,0,0.8)',
-                  color: '#fff',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  whiteSpace: 'nowrap',
+                  top: 4,
+                  right: 4,
+                  background: '#ffcc00',
+                  color: '#222',
+                  borderRadius: '50%',
+                  width: 20,
+                  height: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                  fontSize: 14,
                   zIndex: 10
-                }}>
-                  🔒 Locked
+                }}
+                  title={`Requires base in ${currentCity}`}
+                >
+                  !
                 </div>
               )}
             </button>
@@ -328,11 +296,17 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             onClick={() => {
               updateCash(-pendingGunPurchase.cost);
               // Always add guns to city pool (create if needed)
-              const gunsByCity = { ...(state.gunsByCity || {}) };
               const city = state.currentCity;
-              const newAmount = (gunsByCity[city] || 0) + pendingGunPurchase.qty;
-              dispatch({ type: 'UPDATE_GUNS_BY_CITY', city, amount: newAmount });
+              // Pass the difference (new guns being added), not the total
+              dispatch({ type: 'UPDATE_GUNS_BY_CITY', city, amount: pendingGunPurchase.qty });
               addNotification(`Purchased ${pendingGunPurchase.qty} gun${pendingGunPurchase.qty > 1 ? 's' : ''} for $${pendingGunPurchase.cost.toLocaleString()}`, 'success');
+              
+              // Add helpful reminder about gun assignment
+              const cityBases = state.bases?.[city] || [];
+              if (cityBases.length > 0) {
+                addNotification(`💡 Remember to assign guns to your bases in ${city} for raiding!`, 'info');
+              }
+              
               setShowGunConfirm(false);
               setShowQuickBuyModal(false);
             }}
@@ -491,6 +465,22 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
             Close
           </button>
         </div>
+      </Modal>
+      {/* Heat Breakdown Modal */}
+      <Modal
+        isOpen={showHeatDetails}
+        onClose={() => setShowHeatDetails(false)}
+        title="🔥 Heat Breakdown"
+      >
+        <HeatBreakdown />
+      </Modal>
+      {/* Base Defense Test Modal */}
+      <Modal
+        isOpen={showBaseDefenseTest}
+        onClose={() => setShowBaseDefenseTest(false)}
+        title="🛡️ Base Defense Test"
+      >
+        <BaseDefenseTest onClose={() => setShowBaseDefenseTest(false)} />
       </Modal>
     </div>
   );

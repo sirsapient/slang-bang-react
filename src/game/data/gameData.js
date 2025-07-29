@@ -118,22 +118,22 @@ export const gameData = {
     // Drug configuration
     drugs: {
         'Fentanyl': { 
-            basePrice: 15000,
+            basePrice: 25000,
             volatility: 0.6,
             heatGeneration: 5
         },
         'Oxycontin': { 
-            basePrice: 8000,
+            basePrice: 18000,
             volatility: 0.4,
             heatGeneration: 3
         },
         'Heroin': { 
-            basePrice: 12000,
+            basePrice: 22000,
             volatility: 0.5,
             heatGeneration: 4
         },
         'Cocaine': { 
-            basePrice: 10000,
+            basePrice: 20000,
             volatility: 0.5,
             heatGeneration: 4
         },
@@ -143,7 +143,7 @@ export const gameData = {
             heatGeneration: 1
         },
         'Meth': { 
-            basePrice: 5000,
+            basePrice: 15000,
             volatility: 0.4,
             heatGeneration: 3
         }
@@ -156,7 +156,7 @@ export const gameData = {
             cost: 50000,
             income: 1000, 
             gangRequired: 4, 
-            gunsRequired: 2,
+            gunsRequired: 4, // Updated to match gang member min
             upgradeCost: 15000, 
             maxInventory: 60, // 10 per drug, 6 drugs
             maxSafe: 50000,
@@ -168,7 +168,7 @@ export const gameData = {
             cost: 65000,
             income: 2500, 
             gangRequired: 6, 
-            gunsRequired: 4,
+            gunsRequired: 6, // Updated to match gang member min
             upgradeCost: 40000, 
             maxInventory: 120, // 20 per drug
             maxSafe: 250000,
@@ -180,7 +180,7 @@ export const gameData = {
             cost: 105000,
             income: 6000, 
             gangRequired: 10, 
-            gunsRequired: 6,
+            gunsRequired: 10, // Updated to match gang member min
             upgradeCost: 100000, 
             maxInventory: 240, // 40 per drug
             maxSafe: 500000,
@@ -192,7 +192,7 @@ export const gameData = {
             cost: 205000,
             income: 15000, 
             gangRequired: 15, 
-            gunsRequired: 10,
+            gunsRequired: 15, // Updated to match gang member min
             upgradeCost: null, 
             maxInventory: 480, // 80 per drug
             maxSafe: 1000000,

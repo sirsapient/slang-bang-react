@@ -62,6 +62,7 @@ export default function MailScreen({ onNavigate }: MailScreenProps) {
       case 'success': return '✅';
       case 'warning': return '⚠️';
       case 'error': return '❌';
+      case 'bust': return '🚨';
       default: return '📢';
     }
   };
@@ -71,6 +72,7 @@ export default function MailScreen({ onNavigate }: MailScreenProps) {
       case 'success': return '#66ff66';
       case 'warning': return '#ffcc66';
       case 'error': return '#ff6666';
+      case 'bust': return '#ff4444';
       default: return '#66ccff';
     }
   };

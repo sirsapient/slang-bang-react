@@ -25,8 +25,14 @@ export interface IBaseSystem {
   calculateTotalDailyIncome(): number;
   getBaseSummary(): any;
   processRealTimeSales(): void;
-  checkForBaseRaids(): void;
-  executeBaseRaid(base: any): void;
+  // Heat and warrant management
+  updateWarrant(amount: number): void;
+  calculateHeatLevel(): number;
+  getHeatLevelText(): string;
+  
+  // Base raid system (REMOVED - now integrated into heat system)
+  // checkForBaseRaids(): void;
+  // executeBaseRaid(base: any): void;
 }
 
 export interface Base {
@@ -137,8 +143,14 @@ export declare class BaseSystem implements IBaseSystem {
   calculateTotalDailyIncome(): number;
   getBaseSummary(): any;
   processRealTimeSales(): void;
-  checkForBaseRaids(): void;
-  executeBaseRaid(base: any): void;
+  // Heat and warrant management
+  updateWarrant(amount: number): void;
+  calculateHeatLevel(): number;
+  getHeatLevelText(): string;
+  
+  // Base raid system (REMOVED - now integrated into heat system)
+  // checkForBaseRaids(): void;
+  // executeBaseRaid(base: any): void;
 }
 
 // --- System Constructor Argument Interfaces ---

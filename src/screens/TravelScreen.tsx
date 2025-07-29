@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { useGame } from '../contexts/GameContext.jsx';
-import { useTutorial } from '../contexts/TutorialContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext';
 import { Modal } from '../components/Modal';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
@@ -11,7 +11,7 @@ interface TravelScreenProps {
 }
 
 export default function TravelScreen({ onNavigate }: TravelScreenProps) {
-  const { state, updateCash, updateInventory, travelToCity } = useGame();
+  const { state, updateCash, updateInventory, travelToCity, addNotification } = useGame();
   const { nextStep, activeTutorial, stepIndex, tutorialSteps } = useTutorial();
   const cash = state.cash;
   const currentCity = state.currentCity;
@@ -71,31 +71,63 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
   };
 
   const executeTravel = () => {
+    console.log('[DEBUG] executeTravel called - starting bust check');
     if (!selectedCity) return;
     const cost = calculateTravelCost(selectedCity);
     updateCash(-cost);
     // Check for arrest/bust
     const inventory = state.inventory;
-    // Calculate total drug value using current city prices
-    const prices = gameData.cities[currentCity]?.prices || {};
+    // Calculate total drug value using current city prices from state
+    const prices = state.cityPrices?.[currentCity] || {};
     let totalDrugValue = 0;
+    
+    // Debug: Log inventory and prices
+    console.log(`[DEBUG] Current inventory:`, inventory);
+    console.log(`[DEBUG] Current city prices for ${currentCity}:`, prices);
+    
     Object.keys(inventory).forEach(drug => {
-      totalDrugValue += (inventory[drug] || 0) * (prices[drug] || 0);
+      const quantity = inventory[drug] || 0;
+      const price = prices[drug] || 0;
+      const drugValue = quantity * price;
+      totalDrugValue += drugValue;
+      if (quantity > 0) {
+        console.log(`[DEBUG] ${drug}: ${quantity} units × $${price} = $${drugValue.toLocaleString()}`);
+      }
     });
+    
     const heat = state.heatLevel;
     let bustChance = 0;
     if (totalDrugValue > 0) {
-      if (totalDrugValue < 30000) {
-        bustChance = 0.01; // 1% chance for small hauls
+      // Base bust chance increases with drug value
+      if (totalDrugValue < 10000) {
+        bustChance = 0.005; // 0.5% chance for very small hauls
+      } else if (totalDrugValue < 50000) {
+        bustChance = 0.02; // 2% chance for small hauls
+      } else if (totalDrugValue < 100000) {
+        bustChance = 0.05; // 5% chance for medium hauls
+      } else if (totalDrugValue < 200000) {
+        bustChance = 0.10; // 10% chance for large hauls
       } else {
-        bustChance = 0.01 + ((totalDrugValue - 30000) / 200000);
-        if (heat >= 40) bustChance += 0.03;
-        if (heat >= 70) bustChance += 0.05;
-        bustChance = Math.min(bustChance, 0.3); // Cap at 30%
+        bustChance = 0.15 + ((totalDrugValue - 200000) / 100000) * 0.05; // 15%+ for huge hauls
       }
+      
+      // Heat increases bust chance significantly
+      if (heat >= 20) bustChance += 0.02;
+      if (heat >= 40) bustChance += 0.05;
+      if (heat >= 60) bustChance += 0.10;
+      if (heat >= 80) bustChance += 0.15;
+      
+      // Cap at 50% maximum bust chance
+      bustChance = Math.min(bustChance, 0.5);
     }
+    
+    console.log(`[DEBUG] Bust check - Total drug value: $${totalDrugValue.toLocaleString()}, Heat: ${heat}, Bust chance: ${(bustChance * 100).toFixed(1)}%`);
+    
     const randomRoll = Math.random();
+    console.log(`[DEBUG] Random roll: ${randomRoll.toFixed(3)} (need < ${bustChance.toFixed(3)} to bust)`);
+    
     if (bustChance > 0 && randomRoll < bustChance) {
+      console.log(`[DEBUG] BUSTED! Random roll ${randomRoll.toFixed(3)} < ${bustChance.toFixed(3)}`);
       // Severity based on value
       let severity = 'mild';
       if (totalDrugValue >= 200000) severity = 'severe';
@@ -104,6 +136,14 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
       setShowArrestModal(true);
       setShowConfirm(false);
       return;
+    } else {
+      console.log(`[DEBUG] Safe! Random roll ${randomRoll.toFixed(3)} >= ${bustChance.toFixed(3)}`);
+      // Add notification for successful travel (optional - for debugging)
+      if (totalDrugValue > 0) {
+        addNotification(`✅ Traveled safely with $${totalDrugValue.toLocaleString()} worth of drugs. Bust chance was ${(bustChance * 100).toFixed(1)}%`, 'success');
+      } else {
+        addNotification(`✅ Traveled safely - no drugs in inventory.`, 'info');
+      }
     }
     // Normal travel
     completeTravel();
@@ -131,8 +171,10 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
       case 'mild':
         if (action === 'pay') {
           updateCash(-1000);
+          addNotification(`🚨 BUSTED! Paid $1,000 bribe to avoid arrest. Drug value: $${totalDrugs.toLocaleString()}`, 'bust');
           // TODO: updateWarrant(-5000);
         } else {
+          addNotification(`🚨 BUSTED! Refused bribe - warrant increased. Drug value: $${totalDrugs.toLocaleString()}`, 'bust');
           // TODO: updateWarrant(2000);
         }
         break;
@@ -142,6 +184,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
         Object.keys(state.inventory).forEach(drug => {
           updateInventory(drug, -state.inventory[drug]);
         });
+        addNotification(`🚨 BUSTED! All drugs confiscated. Lost $${totalDrugs.toLocaleString()} worth of drugs.`, 'bust');
         // TODO: updateWarrant(5000);
         break;
         
@@ -152,6 +195,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
         });
         const currentCash = state.cash;
         updateCash(-currentCash);
+        addNotification(`🚨 BUSTED! All drugs AND cash confiscated. Lost $${totalDrugs.toLocaleString()} in drugs + $${currentCash.toLocaleString()} cash.`, 'bust');
         // TODO: updateWarrant(10000);
         break;
     }
@@ -164,6 +208,82 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
   function normalizeCityKey(city: string): string {
     return city.trim();
   }
+
+  // Debug function to test bust system
+  const testBustSystem = () => {
+    console.log('=== BUST SYSTEM TEST ===');
+    const inventory = state.inventory;
+    const prices = state.cityPrices?.[currentCity] || {};
+    const heat = state.heatLevel;
+    
+    console.log('Current inventory:', inventory);
+    console.log('Current city prices:', prices);
+    console.log('Current heat level:', heat);
+    
+    let totalDrugValue = 0;
+    Object.keys(inventory).forEach(drug => {
+      const quantity = inventory[drug] || 0;
+      const price = prices[drug] || 0;
+      const drugValue = quantity * price;
+      totalDrugValue += drugValue;
+      if (quantity > 0) {
+        console.log(`${drug}: ${quantity} units × $${price} = $${drugValue.toLocaleString()}`);
+      }
+    });
+    
+    console.log(`Total drug value: $${totalDrugValue.toLocaleString()}`);
+    
+    // Test bust chance calculation
+    let bustChance = 0;
+    if (totalDrugValue > 0) {
+      if (totalDrugValue < 10000) {
+        bustChance = 0.005;
+      } else if (totalDrugValue < 50000) {
+        bustChance = 0.02;
+      } else if (totalDrugValue < 100000) {
+        bustChance = 0.05;
+      } else if (totalDrugValue < 200000) {
+        bustChance = 0.10;
+      } else {
+        bustChance = 0.15 + ((totalDrugValue - 200000) / 100000) * 0.05;
+      }
+      
+      if (heat >= 20) bustChance += 0.02;
+      if (heat >= 40) bustChance += 0.05;
+      if (heat >= 60) bustChance += 0.10;
+      if (heat >= 80) bustChance += 0.15;
+      
+      bustChance = Math.min(bustChance, 0.5);
+    }
+    
+    console.log(`Calculated bust chance: ${(bustChance * 100).toFixed(1)}%`);
+    
+    // Simulate 100 travel attempts to see bust frequency
+    if (totalDrugValue > 0) {
+      let bustCount = 0;
+      for (let i = 0; i < 100; i++) {
+        if (Math.random() < bustChance) {
+          bustCount++;
+        }
+      }
+      console.log(`Simulation: ${bustCount}/100 travel attempts would result in bust (${bustCount}%)`);
+    }
+    
+    console.log('=== END TEST ===');
+  };
+
+  // Call test function on component mount
+  useEffect(() => {
+    testBustSystem();
+    
+    // Expose inventory to global scope for debugging
+    (window as any).debugInventory = () => {
+      console.log('Current inventory:', state.inventory);
+      console.log('Current city prices:', state.cityPrices?.[currentCity]);
+      console.log('Total inventory units:', Object.values(state.inventory).reduce((sum: number, qty: any) => sum + (qty as number), 0));
+      return state.inventory;
+    };
+  }, []);
 
   return (
     <div className="travel-screen">
@@ -185,6 +305,26 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
         <div>💰 Your Cash: ${cash.toLocaleString()}</div>
         <div>📍 Current City: {currentCity}</div>
         <div>🔥 Heat Level: <span style={{ color: heatColor }}>{heatLevel}</span></div>
+        <div>🎒 Total Inventory: {Object.values(state.inventory).reduce((sum: number, qty: any) => sum + (qty as number), 0)} units</div>
+        {Object.values(state.inventory).reduce((sum: number, qty: any) => sum + (qty as number), 0) > 0 && (
+          <div style={{ color: '#ffcc66', marginTop: '5px', fontSize: '11px' }}>
+            ⚠️ Traveling with drugs risks police bust!
+          </div>
+        )}
+        <button 
+          onClick={testBustSystem}
+          style={{ 
+            background: '#666', 
+            color: '#fff', 
+            border: 'none', 
+            padding: '5px 10px', 
+            borderRadius: '4px',
+            fontSize: '10px',
+            marginTop: '5px'
+          }}
+        >
+          Debug: Test Bust System
+        </button>
       </div>
       
       <div id="cityList">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGame } from '../contexts/GameContext.jsx';
-import { useTutorial } from '../contexts/TutorialContext.jsx';
+import { useTutorial } from '../contexts/TutorialContext';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
 import { Modal } from '../components/Modal';

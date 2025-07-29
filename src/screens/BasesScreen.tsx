@@ -5,6 +5,7 @@ import { gameData } from '../game/data/gameData';
 import type { Base } from '../game/data/gameData-types';
 import { Modal } from '../components/Modal';
 import RaidRiskMeter from '../components/RaidRiskMeter';
+import { useTutorial } from '../contexts/TutorialContext';
 
 interface BasesScreenProps {
   onNavigate: (screen: string) => void;
@@ -16,7 +17,8 @@ function normalizeCityKey(city: string) {
 }
 
 export default function BasesScreen({ onNavigate }: BasesScreenProps) {
-  const { state, updateCash, updateInventory, travelToCity, dispatch, addNotification, getCityRaidActivity, getAvailableGunsInCity } = useGame();
+  const { progress, startTutorial, activeTutorial, nextStep, stepIndex, tutorialSteps } = useTutorial();
+  const { state, updateCash, updateInventory, travelToCity, dispatch, addNotification, getCityRaidActivity, getAvailableGunsInCity, upgradeBase } = useGame();
   const currentCity = state.currentCity;
   const cash = state.cash;
   const [selectedBase, setSelectedBase] = useState<string>('');
@@ -31,7 +33,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
   const [drugTransfer, setDrugTransfer] = useState<DrugTransferState>({});
   const [pendingGangAssign, setPendingGangAssign] = useState<{ baseId: string, value: number } | null>(null);
   const [pendingGunsAssign, setPendingGunsAssign] = useState<{ baseId: string, value: number } | null>(null);
-  const [assignGuns, setAssignGuns] = useState<number>(1);
+  const [assignGuns, setAssignGuns] = useState<{ [baseId: string]: number }>({});
   const [showConfirmTransferModal, setShowConfirmTransferModal] = useState<boolean>(false);
   const [pendingTransfer, setPendingTransfer] = useState<{ base: Base, transfers: { [drug: string]: number }, drugs: string[], maxPerDrug: number } | null>(null);
   const [showCollectInfo, setShowCollectInfo] = useState<{ baseId: string, reasons: string[], cooldown: number } | null>(null);
@@ -39,6 +41,8 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
   const [now, setNow] = useState<number>(Date.now());
   const [pendingFastTravelCity, setPendingFastTravelCity] = useState<string | null>(null);
   const [showFastTravelModal, setShowFastTravelModal] = useState(false);
+  const [showNoDrugsModal, setShowNoDrugsModal] = useState(false);
+
   React.useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
@@ -46,6 +50,15 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
 
   const isBase = (obj: any): obj is Base => {
     return obj && typeof obj === 'object' && typeof obj.id === 'string' && typeof obj.city === 'string' && (typeof obj.type === 'string' || typeof obj.type === 'number') && typeof obj.level === 'number';
+  };
+
+  // Helper function to safely get bases for a city
+  const getBasesForCity = (city: string): Base[] => {
+    const cityBases = bases[city];
+    if (Array.isArray(cityBases)) {
+      return cityBases.flat().filter(isBase);
+    }
+    return cityBases ? [cityBases].filter(isBase) : [];
   };
 
   // --- NEW: Gather all bases grouped by city ---
@@ -84,25 +97,34 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const normCity = normalizeCityKey(city);
     const totalInCity = gangMembers[normCity] || 0;
     let assignedInCity = 0;
-    const cityBases = bases[normCity] || [];
-    cityBases.forEach((base: Base) => {
-      assignedInCity += base.assignedGang || 0;
+    
+    // Get bases directly from state to avoid circular dependency
+    const cityBasesFromState = state.bases?.[normCity] || [];
+    const flatCityBases = Array.isArray(cityBasesFromState) ? cityBasesFromState.flat() : [cityBasesFromState];
+    
+    flatCityBases.forEach((base: any) => {
+      if (isBase(base)) {
+        assignedInCity += base.assignedGang || 0;
+      }
     });
+    
     return Math.max(0, totalInCity - assignedInCity);
   };
-  const availableGang = getAvailableGangMembersInCity(currentCity);
-  // Add available guns in city
-  const availableGuns = getAvailableGunsInCity(currentCity);
-  const cityBases: Base[] = (() => {
-    const arr = bases[normalizeCityKey(currentCity)];
-    if (!arr) return [];
-    // If arr is nested, flatten it
-    const flatArr = Array.isArray(arr[0]) ? arr.flat() : arr;
-    return flatArr.filter(isBase) as Base[];
-  })();
-  console.log('[DEBUG] bases:', bases);
-  console.log('[DEBUG] basesByCity:', basesByCity);
-  console.log('[DEBUG] cityBases:', cityBases, 'currentCity:', currentCity);
+  // Memoize gang calculations to prevent re-renders
+  const availableGang = React.useMemo(() => getAvailableGangMembersInCity(currentCity), [currentCity, state.gangMembers, state.bases]);
+  // Add available guns in city - memoized to prevent re-renders
+  const availableGuns = React.useMemo(() => getAvailableGunsInCity(currentCity), [currentCity, state.gunsByCity, state.bases]);
+  
+  const cityBases: Base[] = React.useMemo(() => {
+    const normCity = normalizeCityKey(currentCity);
+    const cityBasesFromState = state.bases?.[normCity] || [];
+    const flatCityBases = Array.isArray(cityBasesFromState) ? cityBasesFromState.flat() : [cityBasesFromState];
+    return flatCityBases.filter(isBase) as Base[];
+  }, [currentCity, state.bases]);
+  // Removed debug logs to prevent flickering
+  // console.log('[DEBUG] bases:', bases);
+  // console.log('[DEBUG] basesByCity:', basesByCity);
+  // console.log('[DEBUG] cityBases:', cityBases, 'currentCity:', currentCity);
   
   const baseTypes = gameData.baseTypes || {
     small: { name: 'Small Base', cost: 50000, income: 1000, capacity: 10 },
@@ -132,19 +154,18 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       return;
     }
     const normCity = normalizeCityKey(currentCity);
+    // Check if player already owns any bases before purchase
+    const hadAnyBase = Object.values(state.bases || {}).some((cityBases: any) => (Array.isArray(cityBases) ? cityBases.length > 0 : !!cityBases));
     if ((state.bases && state.bases[normCity] && state.bases[normCity].length > 0)) {
       alert('You already own a base in this city!');
       return;
     }
     const typeNum = type;
-    console.log('baseTypes:', baseTypes);
-    console.log('baseTypes[typeNum]:', baseTypes[typeNum]);
-    console.log('gameData.drugs:', gameData.drugs);
     const newBase: Base = {
       id: Date.now().toString(),
       city: normCity,
       type: typeNum.toString(), // store as string
-      level: 1,
+      level: typeNum, // Set level to match the type
       assignedGang: 0,
       drugStorage: 0,
       operational: false,
@@ -156,19 +177,30 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       capacity: baseTypes[typeNum].capacity,
       inventory: Object.fromEntries(Object.keys(gameData.drugs).map(drug => [drug, 0]))
     };
-    console.log('newBase:', newBase);
-    // Use the raw state.bases, not the filtered local bases object
     const updatedBases = { ...(state.bases || {}) };
     if (!updatedBases[normCity]) {
       updatedBases[normCity] = [];
     }
     updatedBases[normCity] = [...updatedBases[normCity], newBase];
-    console.log('About to dispatch UPDATE_BASES with:', updatedBases[normCity]);
     updateCash(-cost);
     dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
-    console.log('[DEBUG] After purchase, updatedBases:', updatedBases, 'currentCity:', normCity);
     setShowPurchaseModal(false);
   };
+
+  // useEffect to trigger firstBase tutorial when player owns their first base
+  const prevBaseCountRef = React.useRef(0);
+  React.useEffect(() => {
+    const totalBases = Object.values(state.bases || {}).reduce((acc: number, cityBases) => {
+      if (Array.isArray(cityBases)) return acc + cityBases.length;
+      if (cityBases) return acc + 1;
+      return acc;
+    }, 0);
+    // Only trigger when going from 0 to 1 base and tutorial not completed
+    if (prevBaseCountRef.current === 0 && totalBases === 1 && !progress.firstBase) {
+      startTutorial('firstBase');
+    }
+    prevBaseCountRef.current = totalBases;
+  }, [state.bases, progress.firstBase, startTutorial]);
   
   const handleUpgradeBase = (baseId: string, newType: string) => {
     let modalCity = currentCity;
@@ -191,14 +223,13 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       alert(`Not enough cash. Need $${upgradeCost.toLocaleString()}`);
       return;
     }
-    const updatedBases = { ...bases };
-    updatedBases[modalCity] = cityBasesArr.map((b: Base) =>
-      b.id === baseId
-        ? { ...b, type: newType, income: baseTypes[newType].income, capacity: baseTypes[newType].capacity }
-        : b
-    );
+    
+    // Use the new upgradeBase function with heat warnings
+    const oldLevel = base.level;
+    const newLevel = parseInt(newType);
+    
     updateCash(-upgradeCost);
-    dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
+    upgradeBase(baseId, oldLevel, newLevel, modalCity);
     setShowUpgradeModal(false);
   };
   
@@ -217,8 +248,10 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const base: Base | undefined = cityBasesArr.find((b: Base) => b.id === baseId);
     if (!base) return;
     const limits = getGangLimits(base.level);
-    let value = typeof assignGang === 'number' ? assignGang : limits.min;
-    value = Math.max(limits.min, Math.min(limits.max, value));
+    const currentAssigned = base.assignedGang || 0;
+    const additionalToAssign = typeof assignGang === 'number' ? assignGang : 0;
+    const totalToAssign = currentAssigned + additionalToAssign;
+    const value = Math.max(limits.min, Math.min(limits.max, totalToAssign));
     setPendingGangAssign({ baseId, value });
   };
 
@@ -241,27 +274,42 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       b.id === baseId ? { ...b, assignedGang: value } : b
     );
     dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
-    setAssignGang(getGangLimits(cityBasesArr.find((b: Base) => b.id === baseId)?.level || 1).min);
+    setAssignGang(getGangLimits(cityBasesArr.find((b: Base) => b.id === baseId)?.level || 1).min - (cityBasesArr.find((b: Base) => b.id === baseId)?.assignedGang || 0));
     setPendingGangAssign(null);
+    // Advance tutorial if on the assign-gang step
+    if (activeTutorial === 'firstBase' && tutorialSteps['firstBase'][stepIndex]?.id === 'base-assign-gang') {
+      nextStep();
+    }
   };
   const cancelAssignGang = () => setPendingGangAssign(null);
 
   const handleAssignGuns = (baseId: string) => {
     const allBases: Base[] = Object.values(bases).flatMap((b: Base | Base[]) => b);
     const modalBase = allBases.find((b: Base) => b.id === baseId);
+    if (!modalBase) {
+      console.error('Base not found:', baseId);
+      return;
+    }
+    
     let modalCity = currentCity;
     for (const [city, basesList] of Object.entries(bases)) {
-      const arr: Base[] = basesList;
+      const arr: Base[] = Array.isArray(basesList) ? basesList : [basesList];
       if (arr.some((b: Base) => b.id === baseId)) {
         modalCity = city;
         break;
       }
     }
-    const cityBasesArr: Base[] = bases[modalCity];
+    
+    const cityBasesArr: Base[] = Array.isArray(bases[modalCity]) ? bases[modalCity] : [];
     const base: Base | undefined = cityBasesArr.find((b: Base) => b.id === baseId);
-    if (!base) return;
+    if (!base) {
+      console.error('Base not found in city:', baseId, modalCity);
+      return;
+    }
+    
     const limits = getGunLimits(base.level);
-    const value = Math.max(limits.min, Math.min(limits.max, assignGuns));
+    const value = Math.max(limits.min, Math.min(limits.max, assignGuns[baseId] || getGunLimits(base.level).min));
+    
     setPendingGunsAssign({ baseId, value });
   };
 
@@ -270,29 +318,39 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const { baseId, value } = pendingGunsAssign;
     const allBases: Base[] = Object.values(bases).flatMap((b: Base | Base[]) => b);
     const modalBase = allBases.find((b: Base) => b.id === baseId);
+    if (!modalBase) {
+      console.error('Base not found:', baseId);
+      return;
+    }
+    
     let modalCity = currentCity;
     for (const [city, basesList] of Object.entries(bases)) {
-      const arr: Base[] = basesList;
+      const arr: Base[] = Array.isArray(basesList) ? basesList : [basesList];
       if (arr.some((b: Base) => b.id === baseId)) {
         modalCity = city;
         break;
       }
     }
-    const cityBasesArr: Base[] = bases[modalCity];
+    
+    const cityBasesArr: Base[] = Array.isArray(bases[modalCity]) ? bases[modalCity] : [];
     const base: Base | undefined = cityBasesArr.find((b: Base) => b.id === baseId);
-    if (!base) return;
+    if (!base) {
+      console.error('Base not found in city:', baseId, modalCity);
+      return;
+    }
+    
     const prevAssigned = base.guns || 0;
     const diff = value - prevAssigned;
     const updatedBases = { ...bases };
     updatedBases[modalCity] = cityBasesArr.map((b: Base) =>
       b.id === baseId ? { ...b, guns: value } : b
     );
-    const updatedGunsByCity = { ...(state.gunsByCity || {}) };
-    const prevGuns = updatedGunsByCity[modalCity] !== undefined ? updatedGunsByCity[modalCity] : (state.guns || 0);
-    updatedGunsByCity[modalCity] = Math.max(0, prevGuns - diff);
     dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
-    dispatch({ type: 'UPDATE_GUNS_BY_CITY', city: modalCity, amount: updatedGunsByCity[modalCity] });
-    setAssignGuns(getGunLimits(base.level).min);
+    // Update guns by city: subtract the difference (guns being assigned to base)
+    if (diff !== 0) {
+      dispatch({ type: 'UPDATE_GUNS_BY_CITY', city: modalCity, amount: -diff });
+    }
+    setAssignGuns(prev => ({ ...prev, [baseId]: getGunLimits(base.level).min }));
     setPendingGunsAssign(null);
   };
   const cancelAssignGuns = () => setPendingGunsAssign(null);
@@ -312,12 +370,39 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const base: Base | undefined = cityBasesArr.find((b: Base) => b.id === baseId);
     if (!base) return;
     
-    // Use the new base management system
-    const result = (window as any).game?.baseManagement?.collectBaseIncome(baseId);
-    if (result && !result.success) {
-      alert(result.error);
+    // Check if player is in the same city as the base
+    if (currentCity !== modalCity) {
+      alert(`You must travel to ${modalCity} to collect income from this base.`);
       return;
     }
+    
+    // Calculate income to collect
+    const timeSinceLastCollect = (now - (base.lastCollected || now)) / (1000 * 60 * 60); // hours
+    const baseType = baseTypes[String(base.type)];
+    const requiredGang = baseType?.gangRequired || 4;
+    const requiredGuns = baseType?.gunsRequired || 2;
+    const hasEnoughGang = (base.assignedGang || 0) >= requiredGang;
+    const hasEnoughGuns = (base.guns || 0) >= requiredGuns;
+    const drugsInBase = base.inventory ? Object.values(base.inventory).reduce((sum, qty) => sum + qty, 0) : 0;
+    const hasDrugs = drugsInBase > 0;
+    const isOperating = hasEnoughGang && hasEnoughGuns && hasDrugs;
+    
+    if (!isOperating) {
+      alert('Base is not operating. Need gang members, guns, and drugs to generate income.');
+      return;
+    }
+    
+    // Calculate accumulated income (max 24 hours)
+    const accumulatedHours = Math.min(timeSinceLastCollect, 24);
+    const incomeToCollect = base.income * (base.assignedGang || 0) * accumulatedHours;
+    
+    if (incomeToCollect <= 0) {
+      alert('No income available to collect.');
+      return;
+    }
+    
+    // Add the income to player's cash
+    updateCash(incomeToCollect);
     
     // Update the base's lastCollected time
     const updatedBases = { ...bases };
@@ -325,25 +410,98 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       b.id === baseId ? { ...b, lastCollected: Date.now() } : b
     );
     dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
+    
+    // Add notification
+    addNotification(`Collected $${incomeToCollect.toLocaleString()} from ${baseType.name}`, 'success');
   };
+  
+
   
   // Calculate total income from all bases in all cities
   const totalIncome = Object.values(basesByCity).flat().reduce((sum: number, base: Base) => {
-    return sum + (base.income * (base.assignedGang || 0));
+    const timeSinceLastCollect = (now - (base.lastCollected || now)) / (1000 * 60 * 60); // hours
+    const baseType = baseTypes[String(base.type)];
+    const requiredGang = baseType?.gangRequired || 4;
+    const requiredGuns = baseType?.gunsRequired || 2;
+    const hasEnoughGang = (base.assignedGang || 0) >= requiredGang;
+    const hasEnoughGuns = (base.guns || 0) >= requiredGuns;
+    const drugsInBase = base.inventory ? Object.values(base.inventory).reduce((sum, qty) => sum + qty, 0) : 0;
+    const hasDrugs = drugsInBase > 0;
+    const isOperating = hasEnoughGang && hasEnoughGuns && hasDrugs;
+    
+    // Calculate accumulated income (max 24 hours)
+    const accumulatedHours = Math.min(timeSinceLastCollect, 24);
+    const accumulatedIncome = isOperating 
+      ? base.income * (base.assignedGang || 0) * accumulatedHours
+      : 0;
+    
+    return sum + accumulatedIncome;
   }, 0);
   
+  // Helper functions to calculate maximum assignable amounts
+  const getMaxGangAssignable = (base: Base) => {
+    const limits = getGangLimits(base.level);
+    const maxForBase = limits.max; // Use the full capacity, not remaining capacity
+    const maxAvailable = availableGang;
+    // Return the maximum total gang members that can be assigned (current gang + available gang)
+    const currentGang = base.assignedGang || 0;
+    const result = Math.min(maxForBase, currentGang + maxAvailable);
+    
+    return result;
+  };
+
+  const getMaxGunsAssignable = (base: Base) => {
+    const limits = getGunLimits(base.level);
+    const maxForBase = limits.max;
+    const maxAvailable = availableGuns; // Don't add base.guns back - availableGuns already accounts for this
+    // Return the maximum total guns that can be assigned (current guns + available guns)
+    const currentGuns = base.guns || 0;
+    const result = Math.min(maxForBase, currentGuns + maxAvailable);
+    
+    return result;
+  };
+
+  // Helper function to get the maximum additional guns that can be assigned
+  const getMaxAdditionalGunsAssignable = (base: Base) => {
+    const limits = getGunLimits(base.level);
+    const maxForBase = limits.max;
+    const currentGuns = base.guns || 0;
+    const maxAvailable = availableGuns;
+    // Return the maximum additional guns that can be assigned
+    const result = Math.min(maxForBase - currentGuns, maxAvailable);
+    
+    return Math.max(0, result);
+  };
+
+  // Helper function to get the maximum additional gang members that can be assigned
+  const getMaxAdditionalGangAssignable = (base: Base) => {
+    const limits = getGangLimits(base.level);
+    const maxForBase = limits.max;
+    const currentGang = base.assignedGang || 0;
+    const maxAvailable = availableGang;
+    // Return the maximum additional gang members that can be assigned
+    const result = Math.min(maxForBase - currentGang, maxAvailable);
+    
+    return Math.max(0, result);
+  };
+
   // Gang/gun assignment limits per base level
   const getGangLimits = (level: number) => {
-    if (level === 1) return { min: 4, max: 6 };
-    if (level === 2) return { min: 6, max: 8 };
-    if (level === 3) return { min: 8, max: 10 };
+    // Base types: 1=Trap House, 2=Safe House, 3=Distribution Center, 4=Drug Fortress
+    if (level === 1) return { min: 4, max: 6 }; // Trap House
+    if (level === 2) return { min: 6, max: 12 }; // Safe House
+    if (level === 3) return { min: 10, max: 24 }; // Distribution Center
+    if (level === 4) return { min: 15, max: 48 }; // Drug Fortress
     return { min: 4, max: 6 };
   };
   const getGunLimits = (level: number) => {
-    if (level === 1) return { min: 2, max: 4 };
-    if (level === 2) return { min: 4, max: 6 };
-    if (level === 3) return { min: 6, max: 8 };
-    return { min: 2, max: 4 };
+    // Base types: 1=Trap House, 2=Safe House, 3=Distribution Center, 4=Drug Fortress
+    // Updated to match gang member limits: guns and gang members now have same min-max ranges
+    if (level === 1) return { min: 4, max: 6 }; // Trap House
+    if (level === 2) return { min: 6, max: 12 }; // Safe House
+    if (level === 3) return { min: 10, max: 24 }; // Distribution Center
+    if (level === 4) return { min: 15, max: 48 }; // Drug Fortress
+    return { min: 4, max: 6 };
   };
   
   // For live cooldown timer updates
@@ -351,6 +509,47 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Initialize assignGuns with current base's guns when bases change
+  React.useEffect(() => {
+    if (cityBases.length > 0) {
+      // Initialize assignGuns for all bases in the city
+      const newAssignGuns: { [baseId: string]: number } = {};
+      cityBases.forEach(base => {
+        newAssignGuns[base.id] = base.guns || getGunLimits(base.level).min;
+      });
+      setAssignGuns(newAssignGuns);
+    }
+  }, [cityBases]);
+
+  // Additional effect to handle base upgrades - update assignGuns when base level changes
+  React.useEffect(() => {
+    if (cityBases.length > 0) {
+      // Check and adjust assignGuns for all bases in the city
+      const updatedAssignGuns: { [baseId: string]: number } = {};
+      let hasChanges = false;
+      
+      cityBases.forEach(base => {
+        const limits = getGunLimits(base.level);
+        // Use the base's current guns instead of assignGuns state to avoid re-render issues
+        const currentValue = base.guns || getGunLimits(base.level).min;
+        
+        // If current value is outside new limits, adjust it
+        if (currentValue < limits.min || currentValue > limits.max) {
+          const newValue = Math.max(limits.min, Math.min(limits.max, currentValue));
+          updatedAssignGuns[base.id] = newValue;
+          hasChanges = true;
+        } else {
+          // Keep the current value
+          updatedAssignGuns[base.id] = currentValue;
+        }
+      });
+      
+      if (hasChanges) {
+        setAssignGuns(updatedAssignGuns);
+      }
+    }
+  }, [cityBases.map(base => `${base.id}-${base.level}`).join(',')]); // Use a stable dependency key
   
   // Travel cost calculation (copied from TravelScreen)
   const calculateTravelCost = (destination: string) => {
@@ -421,6 +620,9 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
         </div>
         <div style={{ fontSize: '2.2rem', color: '#66ff66', fontWeight: 900, letterSpacing: 1 }}>
           ${totalIncome.toLocaleString()}
+        </div>
+        <div style={{ fontSize: '12px', color: '#aaa', marginTop: '8px', textAlign: 'center' }}>
+          Travel to each city to collect income from bases
         </div>
       </div>
       
@@ -503,6 +705,74 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
               <div style={{ fontSize: '14px', color: '#ffff00', marginBottom: '10px', textAlign: 'center' }}>
                 🏢 Your Bases in {city}
               </div>
+              
+              {/* Heat Meter for this city */}
+              <div style={{ 
+                marginBottom: '10px', 
+                padding: '8px', 
+                background: '#333', 
+                borderRadius: '6px',
+                border: '1px solid #555'
+              }}>
+                <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '5px', textAlign: 'center' }}>
+                  🔥 Heat Level in {city}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+                  <RaidRiskMeter 
+                    count={Math.min(10, Math.max(1, Math.floor((() => {
+                      // Calculate raid risk based on city-specific raid activity
+                      const cityRaidActivity = getCityRaidActivity(city);
+                      const raidCount = cityRaidActivity?.count || 0;
+                      
+                      // Base risk from general heat
+                      const warrantHeat = Math.min((state.warrant || 0) / 10000, 50);
+                      const timeHeat = Math.max(0, (state.daysInCurrentCity || 1) - 3) * 5;
+                      const baseHeat = Math.min(100, warrantHeat + timeHeat);
+                      
+                      // Additional risk from raid activity (each raid adds 2-3 points)
+                      const raidRisk = Math.min(30, raidCount * 2.5);
+                      
+                      const totalRisk = Math.min(100, baseHeat + raidRisk);
+                      return totalRisk / 10;
+                    })())))}
+                    max={10} 
+                  />
+                  <div style={{ fontSize: '11px', color: '#aaa' }}>
+                    {(() => {
+                      // Calculate raid risk based on city-specific raid activity
+                      const cityRaidActivity = getCityRaidActivity(city);
+                      const raidCount = cityRaidActivity?.count || 0;
+                      
+                      // Base risk from general heat
+                      const warrantHeat = Math.min((state.warrant || 0) / 10000, 50);
+                      const timeHeat = Math.max(0, (state.daysInCurrentCity || 1) - 3) * 5;
+                      const baseHeat = Math.min(100, warrantHeat + timeHeat);
+                      
+                      // Additional risk from raid activity
+                      const raidRisk = Math.min(30, raidCount * 2.5);
+                      const totalRisk = Math.min(100, baseHeat + raidRisk);
+                      
+                      if (totalRisk < 20) return 'Low Risk';
+                      if (totalRisk < 40) return 'Medium Risk';
+                      if (totalRisk < 70) return 'High Risk';
+                      return 'Critical Risk';
+                    })()}
+                  </div>
+                </div>
+                <div style={{ fontSize: '9px', color: '#666', textAlign: 'center', marginTop: '3px' }}>
+                  Heat: {(() => {
+                    const cityRaidActivity = getCityRaidActivity(city);
+                    const raidCount = cityRaidActivity?.count || 0;
+                    const warrantHeat = Math.min((state.warrant || 0) / 10000, 50);
+                    const timeHeat = Math.max(0, (state.daysInCurrentCity || 1) - 3) * 5;
+                    const baseHeat = Math.min(100, warrantHeat + timeHeat);
+                    const raidRisk = Math.min(30, raidCount * 2.5);
+                    const totalRisk = Math.min(100, baseHeat + raidRisk);
+                    return `${totalRisk.toFixed(0)}%${raidCount > 0 ? ` (+${raidCount} raids)` : ''}`;
+                  })()}
+                </div>
+              </div>
+              
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#ffff00' }}>
@@ -552,10 +822,22 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                   <div style={{ marginBottom: 8 }}>
                     <div style={{ fontSize: '11px', color: '#aaa', marginBottom: 2 }}>Assigned</div>
                     <div style={{ fontSize: '11px', color: '#ffff00' }}>
-                      Gang: {base.assignedGang || 0} / {getGangLimits(base.level).max}
+                      Gang: {base.assignedGang || 0}/{getGangLimits(base.level).max} 
+                      <span style={{ 
+                        color: (base.assignedGang || 0) >= getGangLimits(base.level).min ? '#66ff66' : '#ff6666',
+                        marginLeft: '4px'
+                      }}>
+                        (min: {getGangLimits(base.level).min})
+                      </span>
                     </div>
                     <div style={{ fontSize: '11px', color: '#ffff00' }}>
-                      Guns: {base.guns || 0} / {getGunLimits(base.level).max}
+                      Guns: {base.guns || 0}/{getGunLimits(base.level).max}
+                      <span style={{ 
+                        color: (base.guns || 0) >= getGunLimits(base.level).min ? '#66ff66' : '#ff6666',
+                        marginLeft: '4px'
+                      }}>
+                        (min: {getGunLimits(base.level).min})
+                      </span>
                     </div>
                   </div>
                   {/* Gang Assignment - input and button side by side */}
@@ -573,20 +855,30 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                           if (!isNaN(num)) setAssignGang(num);
                         }
                       }}
-                      min={getGangLimits(base.level).min}
-                      max={Math.min(getGangLimits(base.level).max, availableGang + (base.assignedGang || 0))}
+                      min={getGangLimits(base.level).min - (base.assignedGang || 0)}
+                      max={getMaxGangAssignable(base)}
                       className="quantity-input"
-                      placeholder="Gang to assign"
+                      id="assign-gang-input"
+                      placeholder="Additional gang to assign"
                       style={{ width: 60 }}
                     />
                     <button
                       className="action-btn"
+                      onClick={() => setAssignGang(getMaxAdditionalGangAssignable(base))}
+                      disabled={getMaxAdditionalGangAssignable(base) <= 0}
+                      style={{ fontSize: '10px', padding: '6px 8px', background: '#444', color: '#ccc' }}
+                    >
+                      Max
+                    </button>
+                    <button
+                      className="action-btn"
+                      id="assign-gang-button"
                       onClick={() => handleAssignGang(base.id)}
                       disabled={
                         typeof assignGang !== 'number' ||
-                        assignGang < getGangLimits(base.level).min ||
-                        assignGang > getGangLimits(base.level).max ||
-                        assignGang > availableGang + (base.assignedGang || 0)
+                        assignGang < getGangLimits(base.level).min - (base.assignedGang || 0) ||
+                        assignGang > getGangLimits(base.level).max - (base.assignedGang || 0) ||
+                        assignGang > getMaxGangAssignable(base)
                       }
                       style={{ fontSize: '12px', padding: '8px 12px' }}
                     >
@@ -597,19 +889,43 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: 8 }}>
                     <div style={{ fontSize: '11px', color: '#aaa', minWidth: 70 }}>Assign Guns</div>
                     <input
+                      key={`gun-input-${base.id}-${base.level}`}
                       type="number"
-                      value={assignGuns}
-                      onChange={(e) => setAssignGuns(Math.max(getGunLimits(base.level).min, Math.min(getGunLimits(base.level).max, parseInt(e.target.value) || getGunLimits(base.level).min)))}
+                      value={assignGuns[base.id] || getGunLimits(base.level).min}
+                      onChange={(e) => {
+                        const newValue = Math.max(getGunLimits(base.level).min, Math.min(getMaxGunsAssignable(base), parseInt(e.target.value) || getGunLimits(base.level).min));
+                        setAssignGuns(prev => ({ ...prev, [base.id]: newValue }));
+                      }}
                       min={getGunLimits(base.level).min}
-                      max={getGunLimits(base.level).max}
+                      max={getMaxGunsAssignable(base)}
                       className="quantity-input"
-                      placeholder="Guns to assign"
+                      placeholder="Total guns"
                       style={{ width: 60 }}
+                      onFocus={() => {
+                        // Removed debug log to prevent flickering
+                      }}
                     />
                     <button
                       className="action-btn"
-                      onClick={() => handleAssignGuns(base.id)}
-                      disabled={assignGuns < getGunLimits(base.level).min || assignGuns > getGunLimits(base.level).max}
+                      onClick={() => {
+                        const currentGuns = base.guns || 0;
+                        const additionalGuns = getMaxAdditionalGunsAssignable(base);
+                        setAssignGuns(prev => ({ ...prev, [base.id]: currentGuns + additionalGuns }));
+                      }}
+                      disabled={getMaxAdditionalGunsAssignable(base) <= 0}
+                      style={{ fontSize: '10px', padding: '6px 8px', background: '#444', color: '#ccc' }}
+                    >
+                      Max
+                    </button>
+                    <button
+                      className="action-btn"
+                      onClick={() => {
+                        handleAssignGuns(base.id);
+                      }}
+                      disabled={(() => {
+                        const isDisabled = assignGuns[base.id] < getGunLimits(base.level).min || assignGuns[base.id] > getMaxGunsAssignable(base);
+                        return isDisabled;
+                      })()}
                       style={{ fontSize: '12px', padding: '8px 12px' }}
                     >
                       Assign
@@ -617,16 +933,51 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                   </div>
                   {/* Drug Inventory and Upgrade Buttons Row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 8 }}>
-                    <button
-                      className="action-btn"
-                      onClick={() => {
-                        setDrugModalBaseId(base.id);
-                        setDrugTransfer({});
-                      }}
-                      style={{ fontSize: '12px', padding: '8px 12px', background: '#22bb33', color: '#fff', flex: 1 }}
-                    >
-                      Manage Drug Inventory
-                    </button>
+                    {(() => {
+                      // Check if this is the first base tutorial and player has drugs
+                      const isFirstBaseTutorial = activeTutorial === 'firstBase';
+                      const hasDrugs = Object.values(state.inventory || {}).some((qty: any) => qty > 0);
+                      const isFirstTimeUser = !progress.drugInventoryTutorial;
+                      // Only disable for first-time users who don't have drugs
+                      const isDisabled = isFirstTimeUser && !hasDrugs;
+                      
+                      return (
+                        <button
+                          id="manage-drug-inventory-button"
+                          className="action-btn"
+                          onClick={() => {
+                            // Check if player has drugs - only restrict for first-time players who haven't completed the tutorial
+                            const currentHasDrugs = Object.values(state.inventory || {}).some((qty: any) => qty > 0);
+                            const isFirstTimeUser = !progress.drugInventoryTutorial;
+                            
+                            // Only show the "no drugs" restriction for first-time users who haven't completed the tutorial
+                            if (isFirstTimeUser && !currentHasDrugs) {
+                              setShowNoDrugsModal(true);
+                              return;
+                            }
+                            
+                            setDrugModalBaseId(base.id);
+                            setDrugTransfer({});
+                            
+                            // Show drug inventory tutorial if user hasn't seen it before
+                            if (!progress.drugInventoryTutorial) {
+                              startTutorial('drugInventoryTutorial');
+                            }
+                          }}
+                          style={{ 
+                            fontSize: '12px', 
+                            padding: '8px 12px', 
+                            background: isDisabled ? '#666' : '#22bb33', 
+                            color: '#fff', 
+                            flex: 1,
+                            cursor: isDisabled ? 'not-allowed' : 'pointer'
+                          }}
+                          title={isDisabled ? "You need drugs in your inventory to manage drug storage (first-time users only)" : "Manage drug storage for this base"}
+                        >
+                          {isDisabled ? "Get Drugs First" : "Manage Drug Inventory"}
+                        </button>
+                      );
+                    })()}
                     {(() => {
                       const typeOrder = Object.keys(baseTypes);
                       const currentTypeIndex = typeOrder.indexOf(base.type);
@@ -734,7 +1085,7 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
             break;
           }
         }
-        const cityBasesArr: Base[] = Array.isArray(bases[modalCity]) ? bases[modalCity] : [bases[modalCity]];
+        const cityBasesArr: Base[] = Array.isArray(bases[modalCity]) ? (bases[modalCity] as Base[]) : [bases[modalCity] as Base];
         const base = cityBasesArr.find((b: Base) => b.id === pendingUpgrade.baseId);
         if (!base) return null;
         const nextType = pendingUpgrade.nextType;
@@ -791,20 +1142,34 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
             break;
           }
         }
-        const cityBasesArr: Base[] = bases[modalCity];
+        const cityBasesArr: Base[] = bases[modalCity] || [];
         const base = cityBasesArr.find((b: Base) => b.id === drugModalBaseId);
         if (!base) return null;
+        
+        // Check if this is the first base tutorial and player has no drugs
+        const isFirstBaseTutorial = activeTutorial === 'firstBase';
+        const hasDrugs = Object.values(state.inventory || {}).some((qty: any) => qty > 0);
+        if (isFirstBaseTutorial && !hasDrugs) {
+          // Close the modal if it shouldn't be open during tutorial
+          setDrugModalBaseId(null);
+          return null;
+        }
+        
         // In confirm max transfer modal
         const baseType = baseTypes[String(base.type)];
         const numDrugs = Object.keys(gameData.drugs).length;
         const maxPerDrug = Math.floor((baseType.maxInventory || 60) / numDrugs);
         const drugs = Object.keys(gameData.drugs);
         return (
-          <div className="modal-overlay" onClick={() => setDrugModalBaseId(null)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-overlay" onClick={() => {
+            setDrugModalBaseId(null);
+          }} style={{ zIndex: 100001 }}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ zIndex: 100002 }}>
               <div className="modal-header">
                 <span className="modal-title">Manage Drug Inventory</span>
-                <button className="modal-close" onClick={() => setDrugModalBaseId(null)}>×</button>
+                <button className="modal-close" onClick={() => {
+                  setDrugModalBaseId(null);
+                }}>×</button>
               </div>
               <div className="modal-body">
                 <div style={{ padding: '20px' }}>
@@ -872,7 +1237,9 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
                   <button
                     className="action-btn"
                     style={{ background: '#ff6666', width: '100%' }}
-                    onClick={() => setDrugModalBaseId(null)}
+                    onClick={() => {
+                      setDrugModalBaseId(null);
+                    }}
                   >
                     Cancel
                   </button>
@@ -882,6 +1249,8 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
           </div>
         );
       })()}
+
+
 
       {/* Confirm Assign Gang Modal */}
       {pendingGangAssign && (
@@ -905,25 +1274,31 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
       )}
 
       {/* Confirm Assign Guns Modal */}
-      {pendingGunsAssign && (
-        <div className="modal-overlay" onClick={cancelAssignGuns}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">Confirm Gun Assignment</span>
-              <button className="modal-close" onClick={cancelAssignGuns}>×</button>
-            </div>
-            <div className="modal-body">
-              <div style={{ textAlign: 'center', padding: '20px' }}>
-                <p>
-                  Assign <strong>{pendingGunsAssign.value}</strong> gun(s) to this base?
-                </p>
-                <button className="action-btn" onClick={confirmAssignGuns}>Confirm</button>
-                <button className="action-btn" style={{ background: '#ff6666' }} onClick={cancelAssignGuns}>Cancel</button>
+      {(() => {
+        return pendingGunsAssign && (
+          <div className="modal-overlay" onClick={cancelAssignGuns}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <span className="modal-title">Confirm Gun Assignment</span>
+                <button className="modal-close" onClick={cancelAssignGuns}>×</button>
+              </div>
+              <div className="modal-body">
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <p>
+                    Assign <strong>{pendingGunsAssign.value}</strong> gun(s) to this base?
+                  </p>
+                  <button className="action-btn" onClick={() => {
+                    confirmAssignGuns();
+                  }}>Confirm</button>
+                  <button className="action-btn" style={{ background: '#ff6666' }} onClick={() => {
+                    cancelAssignGuns();
+                  }}>Cancel</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {showConfirmTransferModal && pendingTransfer && (() => {
         const baseId = pendingTransfer.base.id;
@@ -939,8 +1314,8 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
         }
         const cityBasesArr: Base[] = bases[modalCity];
         return (
-          <div className="modal-overlay" onClick={() => setShowConfirmTransferModal(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-overlay" onClick={() => setShowConfirmTransferModal(false)} style={{ zIndex: 100005 }}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ zIndex: 100006 }}>
               <div className="modal-header">
                 <span className="modal-title">Confirm Drug Transfer</span>
                 <button className="modal-close" onClick={() => setShowConfirmTransferModal(false)}>×</button>
@@ -1108,6 +1483,42 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
           </div>
         </div>
       </Modal>
+      {/* No Drugs Modal */}
+      {showNoDrugsModal && (
+        <div className="modal-overlay" onClick={() => setShowNoDrugsModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">🚫 No Drugs Available</span>
+              <button className="modal-close" onClick={() => setShowNoDrugsModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '16px', marginBottom: '15px', color: '#ff6666' }}>
+                  You need drugs in your inventory to manage drug storage.
+                </div>
+                <div style={{ fontSize: '12px', marginBottom: '10px', color: '#ffaa00', fontStyle: 'italic' }}>
+                  (This restriction only applies to first-time users)
+                </div>
+                <div style={{ fontSize: '14px', marginBottom: '20px', color: '#aaa' }}>
+                  To get drugs, you can:
+                  <ul style={{ textAlign: 'left', marginTop: '10px' }}>
+                    <li>Visit the <strong>Market</strong> screen to buy drugs</li>
+                    <li>Use the <strong>Trading</strong> screen to purchase drugs</li>
+                    <li>Travel to different cities to find better prices</li>
+                  </ul>
+                </div>
+                <button 
+                  className="action-btn" 
+                  style={{ width: '100%', background: '#22bb33' }}
+                  onClick={() => setShowNoDrugsModal(false)}
+                >
+                  Got it!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

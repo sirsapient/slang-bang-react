@@ -62,10 +62,15 @@ export class AssetSystem {
     initializeAssets() {
         if (!this.state.data.assets) {
             this.state.data.assets = {
-                owned: {}, // Will store arrays of assets by ID
+                owned: {}, // Will store assets by city: { [city]: { [assetId]: [instances] } }
                 wearing: { jewelry: [] },
                 storage: { jewelry: 2, cars: 0 }
             };
+        }
+        
+        // Initialize city structure if not exists
+        if (!this.state.data.assets.owned) {
+            this.state.data.assets.owned = {};
         }
     }
 
@@ -79,38 +84,56 @@ export class AssetSystem {
     }
 
     /**
-     * Get all owned assets, optionally filtered by type
+     * Get all owned assets, optionally filtered by type and city
      * @param {string|null} type
+     * @param {string|null} city - If null, returns assets from all cities
      * @returns {Object} - Returns arrays of asset instances by asset ID
      */
-    getOwnedAssets(type = null) {
+    getOwnedAssets(type = null, city = null) {
         this.initializeAssets();
         const owned = this.state.data.assets.owned;
-        if (!type) return owned;
-        const filtered = {};
-        Object.entries(owned).forEach(([id, instances]) => {
-            if (instances.length > 0 && instances[0].type === type) {
-                filtered[id] = instances;
-            }
+        const result = {};
+        
+        // If city is specified, only get assets from that city
+        const citiesToCheck = city ? [city] : Object.keys(owned);
+        
+        citiesToCheck.forEach(cityName => {
+            if (!owned[cityName]) return;
+            
+            Object.entries(owned[cityName]).forEach(([id, instances]) => {
+                if (!type || (instances.length > 0 && instances[0].type === type)) {
+                    if (!result[id]) result[id] = [];
+                    result[id].push(...instances);
+                }
+            });
         });
-        return filtered;
+        
+        return result;
     }
     
     /**
-     * Get all owned asset instances as a flat array
+     * Get all owned asset instances as a flat array, optionally filtered by type and city
      * @param {string|null} type
+     * @param {string|null} city - If null, returns instances from all cities
      * @returns {Array} - Returns array of all asset instances
      */
-    getAllOwnedInstances(type = null) {
+    getAllOwnedInstances(type = null, city = null) {
         this.initializeAssets();
         const owned = this.state.data.assets.owned;
         const allInstances = [];
         
-        Object.values(owned).forEach(instances => {
-            instances.forEach(instance => {
-                if (!type || instance.type === type) {
-                    allInstances.push(instance);
-                }
+        // If city is specified, only get instances from that city
+        const citiesToCheck = city ? [city] : Object.keys(owned);
+        
+        citiesToCheck.forEach(cityName => {
+            if (!owned[cityName]) return;
+            
+            Object.values(owned[cityName]).forEach(instances => {
+                instances.forEach(instance => {
+                    if (!type || instance.type === type) {
+                        allInstances.push(instance);
+                    }
+                });
             });
         });
         
@@ -174,10 +197,12 @@ export class AssetSystem {
         this.initializeAssets();
         const owned = this.state.data.assets.owned;
         
-        for (const instances of Object.values(owned)) {
-            const instance = instances.find(inst => inst.instanceId === instanceId);
-            if (instance) {
-                return instance;
+        for (const cityAssets of Object.values(owned)) {
+            for (const instances of Object.values(cityAssets)) {
+                const instance = instances.find(inst => inst.instanceId === instanceId);
+                if (instance) {
+                    return instance;
+                }
             }
         }
         return null;
@@ -186,12 +211,18 @@ export class AssetSystem {
     /**
      * Attempt to purchase an asset. Returns {success, error}.
      * @param {string} assetId
+     * @param {string} city - City where the asset is being purchased
      * @returns {{success: boolean, error?: string}}
      */
-    purchaseAsset(assetId) {
+    purchaseAsset(assetId, city = null) {
         const asset = this.data.assets.find(a => a.id === assetId);
         if (!asset) {
             return { success: false, error: 'Asset not found' };
+        }
+        
+        // Use current city if not specified
+        if (!city) {
+            city = this.state.get('currentCity');
         }
         
         // Check if asset type is unlocked
@@ -221,23 +252,29 @@ export class AssetSystem {
         // Create unique instance ID for this asset
         const instanceId = `${assetId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
+        // Initialize city structure if it doesn't exist
+        if (!this.state.data.assets.owned[city]) {
+            this.state.data.assets.owned[city] = {};
+        }
+        
         // Initialize array for this asset type if it doesn't exist
-        if (!this.state.data.assets.owned[assetId]) {
-            this.state.data.assets.owned[assetId] = [];
+        if (!this.state.data.assets.owned[city][assetId]) {
+            this.state.data.assets.owned[city][assetId] = [];
         }
         
         // Add the new asset instance
-        this.state.data.assets.owned[assetId].push({
+        this.state.data.assets.owned[city][assetId].push({
             ...asset,
             instanceId: instanceId,
             purchaseDate: this.state.get('day'),
-            purchasePrice: asset.cost
+            purchasePrice: asset.cost,
+            city: city // Store which city this asset is in
         });
         
         if (asset.type === 'property' && asset.capacity) {
             this.updateStorageCapacity(asset.capacity);
         }
-        this.events.add(`💎 Purchased ${asset.name} for ${formatCurrency(asset.cost)}`, 'good');
+        this.events.add(`💎 Purchased ${asset.name} in ${city} for ${formatCurrency(asset.cost)}`, 'good');
         
         // Track achievements
         this.state.trackAchievement('assetsOwned');
@@ -266,15 +303,20 @@ export class AssetSystem {
         let asset = null;
         let assetId = null;
         let assetIndex = -1;
+        let city = null;
         
-        for (const [id, instances] of Object.entries(this.state.data.assets.owned)) {
-            const index = instances.findIndex(instance => instance.instanceId === instanceId);
-            if (index !== -1) {
-                asset = instances[index];
-                assetId = id;
-                assetIndex = index;
-                break;
+        for (const [cityName, cityAssets] of Object.entries(this.state.data.assets.owned)) {
+            for (const [id, instances] of Object.entries(cityAssets)) {
+                const index = instances.findIndex(instance => instance.instanceId === instanceId);
+                if (index !== -1) {
+                    asset = instances[index];
+                    assetId = id;
+                    assetIndex = index;
+                    city = cityName;
+                    break;
+                }
             }
+            if (asset) break;
         }
         
         if (!asset) {
@@ -290,11 +332,16 @@ export class AssetSystem {
         const resaleValue = asset.resaleValue || Math.floor(asset.cost * 0.9);
         
         // Remove the specific instance
-        this.state.data.assets.owned[assetId].splice(assetIndex, 1);
+        this.state.data.assets.owned[city][assetId].splice(assetIndex, 1);
         
-        // If no more instances of this asset, remove the array
-        if (this.state.data.assets.owned[assetId].length === 0) {
-            delete this.state.data.assets.owned[assetId];
+        // If no more instances of this asset in this city, remove the array
+        if (this.state.data.assets.owned[city][assetId].length === 0) {
+            delete this.state.data.assets.owned[city][assetId];
+        }
+        
+        // If no more assets in this city, remove the city entry
+        if (Object.keys(this.state.data.assets.owned[city]).length === 0) {
+            delete this.state.data.assets.owned[city];
         }
         
         // Update cash
@@ -305,7 +352,7 @@ export class AssetSystem {
             this.reduceStorageCapacity(asset.capacity);
         }
         
-        this.events.add(`💰 Sold ${asset.name} for ${formatCurrency(resaleValue)}`, 'good');
+        this.events.add(`💰 Sold ${asset.name} from ${city} for ${formatCurrency(resaleValue)}`, 'good');
         return { success: true };
     }
 
@@ -443,6 +490,16 @@ export class AssetSystem {
         this.initializeAssets();
         const allInstances = this.getAllOwnedInstances();
         return allInstances.length;
+    }
+
+    /**
+     * Get assets owned in a specific city
+     * @param {string} city
+     * @returns {Object} - Returns arrays of asset instances by asset ID for the specified city
+     */
+    getAssetsInCity(city) {
+        this.initializeAssets();
+        return this.getOwnedAssets(null, city);
     }
 
     /**

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGame } from './contexts/GameContext.jsx';
-import { useTutorial } from './contexts/TutorialContext.jsx';
+import { useTutorial } from './contexts/TutorialContext';
 import { Modal } from './components/Modal';
+import { NotificationManager, useNotifications } from './components/NotificationManager';
 import HomeScreen from './screens/HomeScreen';
 import MarketScreen from './screens/MarketScreen';
 import TravelScreen from './screens/TravelScreen';
@@ -15,8 +16,16 @@ import MailScreen from './screens/MailScreen';
 import Navigation from './components/Navigation';
 import './App.css';
 
+// Declare global window property for gang attack notifications
+declare global {
+  interface Window {
+    triggerGangAttackNotification?: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+  }
+}
+
 function GameContent() {
   const { state, sellAllDrugs } = useGame();
+  const { showNotification } = useNotifications();
 
   // No systems, updateGameState, or refreshUI in minimal context
   const [currentScreen, setCurrentScreen] = useState('home');
@@ -24,6 +33,17 @@ function GameContent() {
   // Sell All modal state
   const [showSellAllModal, setShowSellAllModal] = useState(false);
   const [sellAllSummary, setSellAllSummary] = useState({ total: 0, drugs: [] as string[] });
+
+  // Set up global notification trigger for game systems
+  useEffect(() => {
+    window.triggerGangAttackNotification = (message: string, type: 'success' | 'error' | 'warning' | 'info') => {
+      showNotification(message, type, 2000);
+    };
+
+    return () => {
+      delete window.triggerGangAttackNotification;
+    };
+  }, [showNotification]);
 
   // Handler for Sell All button
   const handleSellAll = () => {
@@ -117,7 +137,7 @@ function GameContent() {
         <div className="game-title">💊 SLANG AND BANG</div>
         <div className="subtitle">Drug Empire Simulator</div>
       </div>
-      <div className="screen-container">
+      <div className="screen-container" style={{ position: 'relative' }}>
         {renderScreen()}
       </div>
       {/* Sell All Confirmation Modal (global) */}
@@ -160,7 +180,11 @@ function App() {
     }
   }, [progress.gettingStarted]); // Remove startTutorial from dependencies
   
-  return <GameContent />;
+  return (
+    <NotificationManager>
+      <GameContent />
+    </NotificationManager>
+  );
 }
 
 export default App;

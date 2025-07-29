@@ -8,10 +8,25 @@ export class RaidSystem {
         if (typeof window !== 'undefined') {
             const savedBases = localStorage.getItem('enemyBases');
             if (savedBases) {
-                this.enemyBases = JSON.parse(savedBases);
+                try {
+                    this.enemyBases = JSON.parse(savedBases);
+                    console.log('[RAID DEBUG] Loaded saved bases from localStorage:', this.enemyBases);
+                    
+                    // Validate the loaded data structure
+                    if (!this.enemyBases || typeof this.enemyBases !== 'object') {
+                        console.warn('[RAID DEBUG] Invalid saved bases structure, regenerating');
+                        this.enemyBases = this.generateEnemyBases();
+                        localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
+                    }
+                } catch (error) {
+                    console.error('[RAID DEBUG] Error parsing saved bases:', error);
+                    this.enemyBases = this.generateEnemyBases();
+                    localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
+                }
             } else {
                 this.enemyBases = this.generateEnemyBases();
                 localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
+                console.log('[RAID DEBUG] Generated new bases and saved to localStorage:', this.enemyBases);
             }
         } else {
             this.enemyBases = this.generateEnemyBases();
@@ -59,7 +74,12 @@ export class RaidSystem {
         const drugTypes = Object.keys(this.data.drugs);
         const drugCount = Math.floor(maxInventory * (0.2 + difficulty * 0.8));
         
-        for (let i = 0; i < drugCount; i++) {
+        // Cap the maximum drug count based on base type
+        // Use a reasonable cap that scales with base type but doesn't exceed maxInventory
+        const maxDrugCap = Math.min(maxInventory, 60); // Cap at 60 for any base type
+        const cappedDrugCount = Math.min(drugCount, maxDrugCap);
+        
+        for (let i = 0; i < cappedDrugCount; i++) {
             const drug = drugTypes[Math.floor(Math.random() * drugTypes.length)];
             inventory[drug] = (inventory[drug] || 0) + 1;
         }
@@ -125,6 +145,54 @@ export class RaidSystem {
         if (successChance > 0.4) return Math.floor(gangSize * 0.2); // Medium losses
         return Math.floor(gangSize * 0.4); // High losses
     }
+
+    // NEW: Calculate risk of losses for every raid attempt
+    calculateRaidRisk(gangSize, successChance, targetDifficulty, isSuccessful) {
+        const risk = {
+            gangLost: 0,
+            gunsLost: 0,
+            riskLevel: 'none'
+        };
+
+        // Base risk probability increases with difficulty
+        const baseRiskProbability = 0.1 + (targetDifficulty * 0.3); // 10-40% base risk
+        
+        // Failed raids have much higher risk
+        const riskMultiplier = isSuccessful ? 0.5 : 2.0; // Failed raids = 2x risk
+        const finalRiskProbability = Math.min(0.9, baseRiskProbability * riskMultiplier);
+        
+        // Determine if losses occur
+        const hasLosses = Math.random() < finalRiskProbability;
+        
+        if (hasLosses) {
+            // Calculate loss amounts based on difficulty and success
+            let lossPercentage;
+            if (isSuccessful) {
+                // Successful raids: 5-20% loss based on difficulty
+                lossPercentage = 0.05 + (targetDifficulty * 0.15);
+                risk.riskLevel = targetDifficulty < 0.5 ? 'low' : 'medium';
+            } else {
+                // Failed raids: 15-50% loss based on difficulty
+                lossPercentage = 0.15 + (targetDifficulty * 0.35);
+                risk.riskLevel = 'high';
+            }
+            
+            // Apply some randomness to the loss percentage
+            const randomFactor = 0.8 + (Math.random() * 0.4); // ±20% variation
+            const finalLossPercentage = lossPercentage * randomFactor;
+            
+            risk.gangLost = Math.floor(gangSize * finalLossPercentage);
+            risk.gunsLost = Math.floor(gangSize * finalLossPercentage); // Assume 1 gun per gang member
+            
+            // Ensure at least some losses on high-risk raids
+            if (!isSuccessful && risk.gangLost === 0 && gangSize > 0) {
+                risk.gangLost = 1;
+                risk.gunsLost = 1;
+            }
+        }
+        
+        return risk;
+    }
     
     executeRaid(targetId, gangSize) {
         // Find the target object from the target ID
@@ -141,8 +209,16 @@ export class RaidSystem {
         const cooldownPeriod = 5 * 60 * 1000; // 5 minutes
         const timeSinceLastRaid = currentTime - target.lastRaid;
         
+        console.log('[RAID DEBUG] Cooldown check for target:', target.id);
+        console.log('[RAID DEBUG] Current time:', currentTime);
+        console.log('[RAID DEBUG] Last raid time:', target.lastRaid);
+        console.log('[RAID DEBUG] Time since last raid:', timeSinceLastRaid);
+        console.log('[RAID DEBUG] Cooldown period:', cooldownPeriod);
+        console.log('[RAID DEBUG] Is on cooldown:', timeSinceLastRaid < cooldownPeriod);
+        
         if (timeSinceLastRaid < cooldownPeriod) {
             const remainingTime = Math.ceil((cooldownPeriod - timeSinceLastRaid) / 1000 / 60);
+            console.log('[RAID DEBUG] Target is on cooldown, remaining minutes:', remainingTime);
             return { 
                 success: false, 
                 error: `Target is on cooldown. Wait ${remainingTime} more minutes before raiding again.`,
@@ -177,6 +253,10 @@ export class RaidSystem {
         
         const success = Math.random() < successChance;
         
+        // Calculate base heat based on target difficulty
+        // Hard targets (difficulty > 0.7) generate 2x more heat than easy targets (difficulty < 0.3)
+        const difficultyHeatMultiplier = 1 + (target.difficulty * 1.5); // 1x for easy, 2.05x for hard
+        
         if (success) {
             console.log('Raid successful! Target:', target);
             console.log('Target cash:', target.cash);
@@ -196,12 +276,48 @@ export class RaidSystem {
                 this.state.updateInventory(drug, loot.drugs[drug]);
             });
             
-            // Apply rank-based heat scaling
-            const baseHeat = 1000 + Math.floor(Math.random() * 2000);
+            // ENHANCED HEAT SYSTEM: Successful raids generate significantly more heat
+            // Base heat increased from 1000-3000 to 2000-5000, with difficulty multiplier
+            const baseHeat = 2000 + Math.floor(Math.random() * 3000);
+            const difficultyAdjustedHeat = Math.floor(baseHeat * difficultyHeatMultiplier);
+            
             const heatScaling = this.data?.config?.heatScalingFactor || 1.2;
-            const playerRank = window.game?.screens?.home?.getCurrentRank() || 1;
-            const scaledHeat = Math.floor(baseHeat * Math.pow(heatScaling, playerRank - 1));
-            this.state.updateWarrant(scaledHeat);
+            // Simple rank calculation based on cash/net worth instead of accessing window.game
+            const playerCash = this.state.getCash ? this.state.getCash() : 0;
+            const playerRank = Math.min(10, Math.max(1, Math.floor(Math.log10(playerCash + 1))));
+            const scaledHeat = Math.floor(difficultyAdjustedHeat * Math.pow(heatScaling, playerRank - 1));
+            
+            // Add city raid activity penalty (increased from 10% to 15% per raid)
+            const cityRaidActivity = this.state.getCityRaidActivity(city);
+            const raidCount = cityRaidActivity.count;
+            const activityPenalty = Math.floor(scaledHeat * (raidCount * 0.15)); // 15% increase per raid
+            const totalHeat = scaledHeat + activityPenalty;
+            
+            // BASE DAMAGE SYSTEM: Successful raids cause significant base damage
+            const baseDamagePercent = 0.15 + (target.difficulty * 0.25); // 15-40% damage based on difficulty
+            const baseDamage = Math.floor(target.cash * baseDamagePercent);
+            target.cash = Math.max(0, target.cash - baseDamage);
+            
+            // Also damage drug inventory
+            const drugDamagePercent = 0.1 + (target.difficulty * 0.2); // 10-30% drug damage
+            if (target.drugs && typeof target.drugs === 'object') {
+                Object.keys(target.drugs).forEach(drug => {
+                    const currentAmount = target.drugs[drug] || 0;
+                    const drugDamage = Math.floor(currentAmount * drugDamagePercent);
+                    target.drugs[drug] = Math.max(0, currentAmount - drugDamage);
+                });
+            }
+            
+            this.state.updateWarrant(totalHeat);
+            
+            // NEW: Calculate and apply risk of losses for successful raids
+            const raidRisk = this.calculateRaidRisk(gangSize, successChance, target.difficulty, true);
+            if (raidRisk.gangLost > 0 && this.state.removeGangMembersFromCity) {
+                this.state.removeGangMembersFromCity(city, raidRisk.gangLost);
+            }
+            if (raidRisk.gunsLost > 0 && this.state.removeGunsFromCity) {
+                this.state.removeGunsFromCity(city, raidRisk.gunsLost);
+            }
             
             // Track achievements
             this.state.trackAchievement('totalRaids');
@@ -210,41 +326,82 @@ export class RaidSystem {
             
             // Update last raid timestamp
             target.lastRaid = Date.now();
+            console.log('[RAID DEBUG] Updated lastRaid timestamp for target:', target.id, 'to:', target.lastRaid);
             // Persist enemyBases to localStorage after raid
             if (typeof window !== 'undefined') {
                 localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
+                console.log('[RAID DEBUG] Saved updated bases to localStorage');
             }
 
-            // Increment city raid activity for base attack probability
+            // Increment city raid activity
             if (this.state.incrementCityRaidActivity) {
                 this.state.incrementCityRaidActivity(city);
             }
 
-            // Log results
-            const raidMsg = `⚔️ Raid successful! Looted $${(loot.cash || 0).toLocaleString()} and drugs`;
+            // Log results with base damage and risk info
+            let raidMsg = `⚔️ Raid successful! Looted $${(loot.cash || 0).toLocaleString()} and drugs. Base damaged: $${baseDamage.toLocaleString()}`;
+            if (raidRisk.gangLost > 0 || raidRisk.gunsLost > 0) {
+                raidMsg += ` Lost ${raidRisk.gangLost} gang members and ${raidRisk.gunsLost} guns.`;
+            }
             this.events.add(raidMsg, 'good');
             this.state.addNotification(raidMsg, 'success');
             
-            return { success: true, loot, heatIncrease: scaledHeat };
+            return { 
+                success: true, 
+                loot, 
+                heatIncrease: totalHeat,
+                baseDamage: baseDamage,
+                losses: raidRisk,
+                heatBreakdown: {
+                    baseHeat: scaledHeat,
+                    activityPenalty: activityPenalty,
+                    raidCount: raidCount,
+                    difficultyMultiplier: difficultyHeatMultiplier
+                }
+            };
         } else {
-            // Failed raid - still get heat but no loot
-            const baseHeat = 500 + Math.floor(Math.random() * 1000);
-            const heatScaling = this.data?.config?.heatScalingFactor || 1.2;
-            const playerRank = window.game?.screens?.home?.getCurrentRank() || 1;
-            const scaledHeat = Math.floor(baseHeat * Math.pow(heatScaling, playerRank - 1));
-            this.state.updateWarrant(scaledHeat);
+            // Failed raid - still get heat but no loot, and less base damage
+            // ENHANCED HEAT SYSTEM: Failed raids still generate significant heat but less than successful
+            // Base heat increased from 500-1500 to 1000-2500, with difficulty multiplier
+            const baseHeat = 1000 + Math.floor(Math.random() * 1500);
+            const difficultyAdjustedHeat = Math.floor(baseHeat * difficultyHeatMultiplier);
             
-            // Calculate losses
-            const gangLost = Math.floor(gangSize * (0.1 + Math.random() * 0.2));
-            const gunsLost = Math.floor(gangSize * (0.1 + Math.random() * 0.2)); // Assume 1 gun per gang member sent
-            if (gangLost > 0 && this.state.removeGangMembersFromCity) {
-              this.state.removeGangMembersFromCity(city, gangLost);
+            const heatScaling = this.data?.config?.heatScalingFactor || 1.2;
+            // Simple rank calculation based on cash/net worth instead of accessing window.game
+            const playerCash = this.state.getCash ? this.state.getCash() : 0;
+            const playerRank = Math.min(10, Math.max(1, Math.floor(Math.log10(playerCash + 1))));
+            const scaledHeat = Math.floor(difficultyAdjustedHeat * Math.pow(heatScaling, playerRank - 1));
+            
+            // Add city raid activity penalty (increased from 10% to 15% per raid)
+            const cityRaidActivity = this.state.getCityRaidActivity(city);
+            const raidCount = cityRaidActivity.count;
+            const activityPenalty = Math.floor(scaledHeat * (raidCount * 0.15)); // 15% increase per raid
+            const totalHeat = scaledHeat + activityPenalty;
+            
+            // BASE DAMAGE SYSTEM: Failed raids cause minimal base damage
+            const baseDamagePercent = 0.05 + (target.difficulty * 0.1); // 5-15% damage based on difficulty
+            const baseDamage = Math.floor(target.cash * baseDamagePercent);
+            target.cash = Math.max(0, target.cash - baseDamage);
+            
+            // Minimal drug inventory damage
+            const drugDamagePercent = 0.03 + (target.difficulty * 0.07); // 3-10% drug damage
+            if (target.drugs && typeof target.drugs === 'object') {
+                Object.keys(target.drugs).forEach(drug => {
+                    const currentAmount = target.drugs[drug] || 0;
+                    const drugDamage = Math.floor(currentAmount * drugDamagePercent);
+                    target.drugs[drug] = Math.max(0, currentAmount - drugDamage);
+                });
             }
-            if (gunsLost > 0 && this.state.removeGunsFromCity) {
-              this.state.removeGunsFromCity(city, gunsLost);
+            
+            this.state.updateWarrant(totalHeat);
+            
+            // NEW: Calculate and apply risk of losses for failed raids (much higher risk)
+            const raidRisk = this.calculateRaidRisk(gangSize, successChance, target.difficulty, false);
+            if (raidRisk.gangLost > 0 && this.state.removeGangMembersFromCity) {
+                this.state.removeGangMembersFromCity(city, raidRisk.gangLost);
             }
-            if ((gangLost > 0 || gunsLost > 0) && this.state.addNotification) {
-              this.state.addNotification(`❌ Raid failed! Lost ${gangLost} gang members and ${gunsLost} guns in ${city}.`, 'error');
+            if (raidRisk.gunsLost > 0 && this.state.removeGunsFromCity) {
+                this.state.removeGunsFromCity(city, raidRisk.gunsLost);
             }
             
             // Track failed raid
@@ -252,21 +409,38 @@ export class RaidSystem {
             
             // Update last raid timestamp (even for failed raids)
             target.lastRaid = Date.now();
+            console.log('[RAID DEBUG] Updated lastRaid timestamp for failed raid target:', target.id, 'to:', target.lastRaid);
             // Persist enemyBases to localStorage after raid
             if (typeof window !== 'undefined') {
                 localStorage.setItem('enemyBases', JSON.stringify(this.enemyBases));
+                console.log('[RAID DEBUG] Saved updated bases to localStorage after failed raid');
             }
 
-            // Increment city raid activity for base attack probability
+            // Increment city raid activity (even for failed raids)
             if (this.state.incrementCityRaidActivity) {
                 this.state.incrementCityRaidActivity(city);
             }
 
-            const failMsg = `❌ Raid failed! Gained ${scaledHeat.toLocaleString()} heat`;
+            // Log results with risk info
+            let failMsg = `❌ Raid failed! Gained ${totalHeat.toLocaleString()} heat, Base damaged: $${baseDamage.toLocaleString()}`;
+            if (raidRisk.gangLost > 0 || raidRisk.gunsLost > 0) {
+                failMsg += ` Lost ${raidRisk.gangLost} gang members and ${raidRisk.gunsLost} guns.`;
+            }
             this.events.add(failMsg, 'bad');
             this.state.addNotification(failMsg, 'error');
             
-            return { success: false, heatIncrease: scaledHeat };
+            return { 
+                success: false, 
+                heatIncrease: totalHeat,
+                baseDamage: baseDamage,
+                losses: raidRisk,
+                heatBreakdown: {
+                    baseHeat: scaledHeat,
+                    activityPenalty: activityPenalty,
+                    raidCount: raidCount,
+                    difficultyMultiplier: difficultyHeatMultiplier
+                }
+            };
         }
     }
     
@@ -280,5 +454,23 @@ export class RaidSystem {
         if (difficulty < 0.3) return 'Easy';
         if (difficulty < 0.7) return 'Medium';
         return 'Hard';
+    }
+    
+    // Method to refresh data from localStorage (for debugging)
+    refreshFromStorage() {
+        if (typeof window !== 'undefined') {
+            const savedBases = localStorage.getItem('enemyBases');
+            if (savedBases) {
+                try {
+                    this.enemyBases = JSON.parse(savedBases);
+                    console.log('[RAID DEBUG] Refreshed from localStorage:', this.enemyBases);
+                    return true;
+                } catch (error) {
+                    console.error('[RAID DEBUG] Error refreshing from localStorage:', error);
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 } 

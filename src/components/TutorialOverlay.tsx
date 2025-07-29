@@ -8,7 +8,7 @@ const overlayStyle: React.CSSProperties = {
   width: '100vw',
   height: '100vh',
   background: 'rgba(0,0,0,0.55)',
-  zIndex: 99999, // Much higher z-index to ensure it's above everything
+  zIndex: 100003, // Higher than drug inventory modal (100001/100002)
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'center',
@@ -26,7 +26,7 @@ const boxStyle: React.CSSProperties = {
   color: '#fff',
   textAlign: 'center',
   border: '2px solid #66ff66',
-  zIndex: 100000, // Much higher z-index to ensure it's above everything
+  zIndex: 100004, // Higher than drug inventory modal (100001/100002)
   pointerEvents: 'auto', // Allow clicks on the tutorial box
 };
 
@@ -56,15 +56,6 @@ const buttonStyle: React.CSSProperties = {
 export default function TutorialOverlay() {
   const { activeTutorial, stepIndex, tutorialSteps, nextStep, skipTutorial } = useTutorial();
   const overlayRef = useRef<HTMLDivElement>(null);
-
-  console.log('TutorialOverlay render:', { activeTutorial, stepIndex, tutorialSteps });
-  
-  // Debug: Log when jewelry tutorial should be active
-  if (activeTutorial === 'assetsJewelryTutorial') {
-    console.log('Jewelry tutorial is active, stepIndex:', stepIndex);
-    const step = tutorialSteps[activeTutorial][stepIndex];
-    console.log('Current step:', step);
-  }
 
   // Always call useEffect, even if there's no active tutorial
   useEffect(() => {
@@ -96,8 +87,6 @@ export default function TutorialOverlay() {
     }
 
     if (step.highlightElement) {
-      console.log('Highlighting element:', step.highlightElement, 'for step:', stepIndex);
-      
       // Remove any existing highlights
       const existingHighlights = document.querySelectorAll('.tutorial-highlight');
       existingHighlights.forEach(el => {
@@ -117,16 +106,44 @@ export default function TutorialOverlay() {
 
       // Add highlight to the target element
       const targetElement = document.getElementById(step.highlightElement);
-      console.log('Looking for element with ID:', step.highlightElement);
-      console.log('Found target element:', targetElement);
       
       if (targetElement) {
         targetElement.classList.add('tutorial-highlight');
+
+        // Special handling for Assign Gang tutorial step
+        if (step.highlightElement === 'assign-gang-button') {
+          // Highlight the button as usual
+          targetElement.style.zIndex = '1007';
+          targetElement.style.position = 'relative';
+          targetElement.style.transform = 'scale(1.01)';
+          targetElement.style.boxShadow = '0 2px 8px rgba(102, 255, 102, 0.2)';
+          targetElement.style.border = '2px solid #66ff66';
+          targetElement.style.borderRadius = '8px';
+          targetElement.style.filter = 'none';
+          targetElement.style.pointerEvents = 'auto';
+          targetElement.style.cursor = 'pointer';
+
+          // Also enable pointer events for the input field next to the button
+          const input = document.getElementById('assign-gang-input');
+          if (input) {
+            input.style.pointerEvents = 'auto';
+            input.style.cursor = 'auto';
+            input.style.zIndex = '1007';
+          }
+
+          // Make the overlay non-blocking for this step
+          if (overlayRef.current) {
+            overlayRef.current.style.pointerEvents = 'none';
+          }
+        } else {
+          // For all other steps, restore overlay pointer events
+          if (overlayRef.current) {
+            overlayRef.current.style.pointerEvents = 'auto';
+          }
+        }
         
         // Special handling for trading button (step 10 in gettingStarted tutorial)
         if (activeTutorial === 'gettingStarted' && stepIndex === 10 && step.highlightElement === 'trading-button') {
-          console.log('Special handling for trading button');
-          
           // Make the trading button prominent and clickable (minimal glow, contained effect)
           targetElement.style.zIndex = '1007';
           targetElement.style.position = 'relative';
@@ -138,8 +155,6 @@ export default function TutorialOverlay() {
           targetElement.style.pointerEvents = 'auto';
           targetElement.style.cursor = 'pointer';
         } else if (activeTutorial === 'assetsTutorial' && stepIndex === 5 && step.highlightElement === 'wear-jewelry-button') {
-          console.log('Special handling for wear jewelry button');
-          
           // Make the wear jewelry button prominent and clickable
           targetElement.style.zIndex = '1007';
           targetElement.style.position = 'relative';
@@ -166,7 +181,6 @@ export default function TutorialOverlay() {
             appGrid.style.zIndex = '1006';
             appGrid.style.position = 'relative';
             appGrid.style.pointerEvents = 'auto';
-            console.log('App grid made clickable');
           }
           
           // Create a transparent cutout around the trading button
@@ -192,7 +206,6 @@ export default function TutorialOverlay() {
             // Add a click handler to the overlay that allows clicks to pass through to the button
             const handleOverlayClick = (e: MouseEvent) => {
               const target = e.target as HTMLElement;
-              console.log('Overlay clicked, target:', target);
               
               // Check if click is near the trading button
               const buttonRect = targetElement.getBoundingClientRect();
@@ -204,13 +217,8 @@ export default function TutorialOverlay() {
                 Math.pow(clickY - (buttonRect.top + buttonRect.height / 2), 2)
               );
               
-              console.log('Click distance from button center:', distance);
-              console.log('Button bounds:', buttonRect);
-              console.log('Click position:', { x: clickX, y: clickY });
-              
               if (distance < Math.max(buttonRect.width, buttonRect.height) * 3) {
                 // Click is near the button, trigger the tutorial next step
-                console.log('Overlay click near trading button, advancing tutorial');
                 nextStep();
               }
             };
@@ -223,7 +231,6 @@ export default function TutorialOverlay() {
           
           // Add a click event listener to ensure the button is clickable
           const handleClick = (e: Event) => {
-            console.log('Trading button clicked during tutorial');
             // Don't stop propagation - let the button's original onClick run
             // The button's onClick will handle both navigation and tutorial advancement
           };
@@ -232,8 +239,6 @@ export default function TutorialOverlay() {
           
           // Store the event listener for cleanup
           (targetElement as any)._tutorialClickHandler = handleClick;
-          
-          console.log('Trading button setup complete');
         } else if (activeTutorial === 'assetsJewelryTutorial' && stepIndex === 0 && step.highlightElement === 'jewelry-tab') {
           console.log('Special handling for jewelry tab (step 0)');
           
@@ -893,15 +898,16 @@ export default function TutorialOverlay() {
   const noButtons = step.noButtons;
   const showSkipEntireTutorial = isGettingStarted && isFirstStep;
 
-
+  // Support custom skipButton/nextButton/okButton for any tutorial step
+  const showCustomSkip = step.skipButton;
+  const showCustomNext = step.nextButton;
+  const showOkButton = step.okButton;
 
   const handleNextClick = () => {
-    console.log('Next button clicked');
     nextStep();
   };
 
   const handleSkipClick = () => {
-    console.log('Skip button clicked');
     skipTutorial();
   };
 
@@ -909,20 +915,31 @@ export default function TutorialOverlay() {
     <div ref={overlayRef} style={overlayStyle} className="tutorial-overlay">
       <div style={boxStyle}>
         <div style={messageStyle}>{step.message}</div>
-        {!requiresClick && !noButtons && (
+        {/* Show Next/Skip/OK for custom steps or default for gettingStarted */}
+        {((!requiresClick && !noButtons) || showCustomNext || showCustomSkip || showOkButton) && (
           <div style={buttonRowStyle}>
-            <button 
-              style={{ ...buttonStyle, background: '#66ff66', color: '#222' }} 
-              onClick={handleNextClick}
-            >
-              Next
-            </button>
-            {showSkipEntireTutorial && (
+            {showOkButton && (
+              <button 
+                style={{ ...buttonStyle, background: '#66ff66', color: '#222' }} 
+                onClick={handleNextClick}
+              >
+                OK
+              </button>
+            )}
+            {(showCustomNext || (!requiresClick && !noButtons)) && !showOkButton && (
+              <button 
+                style={{ ...buttonStyle, background: '#66ff66', color: '#222' }} 
+                onClick={handleNextClick}
+              >
+                Next
+              </button>
+            )}
+            {(showCustomSkip || showSkipEntireTutorial) && (
               <button 
                 style={{ ...buttonStyle, background: '#ff6666', color: '#fff' }} 
                 onClick={handleSkipClick}
               >
-                Skip All Tutorials
+                Skip Tutorial
               </button>
             )}
           </div>

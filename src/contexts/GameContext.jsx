@@ -3,6 +3,7 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 // @ts-ignore
 import { gameData } from '../game/data/gameData';
 import { RaidSystem } from '../game/systems/raid';
+import { BaseDefenseSystem } from '../game/systems/baseDefense';
 import { useTutorial } from './TutorialContext';
 
 // --- Price & Supply Generation ---
@@ -68,6 +69,7 @@ const initialState = {
   saveVersion: '1.0',
   lastSaved: Date.now(),
   notifications: [],
+  cityRaidActivity: {}, // { [city]: { count: number, lastRaid: number } }
   achievements: {
     unlocked: [],
     progress: {
@@ -153,8 +155,9 @@ function gameReducer(state, action) {
     case 'BUY_ASSET': {
       const { assetId, assetData } = action;
       const owned = { ...state.assets.owned };
-      if (!owned[assetId]) owned[assetId] = [];
-      owned[assetId] = [...owned[assetId], assetData];
+      if (!owned[assetData.cityPurchased]) owned[assetData.cityPurchased] = {};
+      if (!owned[assetData.cityPurchased][assetId]) owned[assetData.cityPurchased][assetId] = [];
+      owned[assetData.cityPurchased][assetId] = [...owned[assetData.cityPurchased][assetId], assetData];
       return {
         ...state,
         cash: state.cash - assetData.cost,
@@ -165,11 +168,19 @@ function gameReducer(state, action) {
       };
     }
     case 'SELL_ASSET': {
-      const { instanceId, assetId, resaleValue } = action;
+      const { instanceId, assetId, resaleValue, city } = action;
       const owned = { ...state.assets.owned };
-      if (!owned[assetId]) return state;
-      owned[assetId] = owned[assetId].filter((inst) => inst.instanceId !== instanceId);
-      if (owned[assetId].length === 0) delete owned[assetId];
+      if (!owned[city]) return state;
+      if (!owned[city][assetId]) return state;
+      
+      owned[city][assetId] = owned[city][assetId].filter((inst) => inst.instanceId !== instanceId);
+      if (owned[city][assetId].length === 0) delete owned[city][assetId];
+      
+      // If no more assets in this city, remove the city entry
+      if (Object.keys(owned[city]).length === 0) {
+        delete owned[city];
+      }
+      
       // Remove from wearing if jewelry
       const wearing = { ...state.assets.wearing };
       wearing.jewelry = wearing.jewelry.filter((id) => id !== instanceId);
@@ -206,6 +217,12 @@ function gameReducer(state, action) {
           ...state.assets,
           wearing,
         },
+      };
+    }
+    case 'UPDATE_HEAT_LEVEL': {
+      return {
+        ...state,
+        heatLevel: action.heatLevel,
       };
     }
     case 'MARK_NOTIFICATION_AS_READ': {
@@ -274,14 +291,189 @@ function gameReducer(state, action) {
         bases: newBases,
       };
     }
+    case 'UPGRADE_BASE': {
+      const { baseId, oldLevel, newLevel, city } = action;
+      const newBases = { ...state.bases };
+      
+      // Find and upgrade the base
+      if (newBases[city]) {
+        newBases[city] = newBases[city].map(base => {
+          if (base.id === baseId) {
+            return { ...base, level: newLevel };
+          }
+          return base;
+        });
+      }
+      
+      // Add heat warning notification
+      const heatIncrease = Math.min(20, newLevel * 2) - Math.min(20, oldLevel * 2);
+      if (newLevel >= 4 && oldLevel < 4) {
+        // Drug Fortress upgrade
+        const notifications = [
+          ...state.notifications,
+          {
+            id: Date.now() + Math.floor(Math.random() * 10000),
+            message: `🔥 Upgraded base in ${city} - Heat increased by ${heatIncrease}%`,
+            type: 'warning',
+            day: state.day,
+            timestamp: Date.now(),
+            read: false,
+          },
+          {
+            id: Date.now() + Math.floor(Math.random() * 10000) + 1,
+            message: `⚠️ Drug Fortress attracts major attention! Police raids more likely.`,
+            type: 'warning',
+            day: state.day,
+            timestamp: Date.now(),
+            read: false,
+          }
+        ];
+        return {
+          ...state,
+          bases: newBases,
+          notifications,
+        };
+      } else if (heatIncrease > 0) {
+        const notifications = [
+          ...state.notifications,
+          {
+            id: Date.now() + Math.floor(Math.random() * 10000),
+            message: `🔥 Upgraded base in ${city} - Heat increased by ${heatIncrease}%`,
+            type: 'warning',
+            day: state.day,
+            timestamp: Date.now(),
+            read: false,
+          }
+        ];
+        return {
+          ...state,
+          bases: newBases,
+          notifications,
+        };
+      }
+      
+      return {
+        ...state,
+        bases: newBases,
+      };
+    }
     case 'UPDATE_GUNS_BY_CITY': {
       const { city, amount } = action;
       return {
         ...state,
+        guns: state.guns + amount,
         gunsByCity: {
           ...state.gunsByCity,
-          [city]: amount
+          [city]: (state.gunsByCity[city] || 0) + amount
         }
+      };
+    }
+    case 'UPDATE_GANG_MEMBERS': {
+      const { city, amount } = action;
+      const oldTotal = state.gangSize;
+      const newTotal = oldTotal + amount;
+      
+      // Calculate heat warnings
+      const notifications = [...state.notifications];
+      
+      // Check if crossing gang size thresholds
+      if (oldTotal < 50 && newTotal >= 50) {
+        notifications.push({
+          id: Date.now() + Math.floor(Math.random() * 10000),
+          message: `👥 Large gang detected! Heat increased by 5%`,
+          type: 'warning',
+          day: state.day,
+          timestamp: Date.now(),
+          read: false,
+        });
+      }
+      
+      if (oldTotal < 100 && newTotal >= 100) {
+        notifications.push({
+          id: Date.now() + Math.floor(Math.random() * 10000) + 1,
+          message: `👥 Massive gang detected! Heat increased by 10%`,
+          type: 'warning',
+          day: state.day,
+          timestamp: Date.now(),
+          read: false,
+        });
+      }
+      
+      // General warning for significant recruitment
+      if (amount >= 10) {
+        const heatIncrease = Math.floor(amount / 10) * 0.5;
+        notifications.push({
+          id: Date.now() + Math.floor(Math.random() * 10000) + 2,
+          message: `👥 Recruited ${amount} members - Heat increased by ${heatIncrease}%`,
+          type: 'warning',
+          day: state.day,
+          timestamp: Date.now(),
+          read: false,
+        });
+      }
+      
+      return {
+        ...state,
+        gangSize: newTotal,
+        gangMembers: {
+          ...state.gangMembers,
+          [city]: (state.gangMembers[city] || 0) + amount
+        },
+        notifications,
+      };
+    }
+    case 'UPDATE_CITY_RAID_ACTIVITY': {
+      const { city, activity } = action;
+      return {
+        ...state,
+        cityRaidActivity: {
+          ...state.cityRaidActivity,
+          [city]: activity
+        }
+      };
+    }
+    case 'UPDATE_WARRANT': {
+      return {
+        ...state,
+        warrant: Math.max(0, (state.warrant || 0) + action.amount)
+      };
+    }
+    case 'UPDATE_BASE_INVENTORY': {
+      const { baseId, city, drug, amount } = action;
+      const newBases = { ...state.bases };
+      
+      if (newBases[city]) {
+        newBases[city] = newBases[city].map(base => {
+          if (base.id === baseId) {
+            const newInventory = { ...base.inventory };
+            newInventory[drug] = Math.max(0, (newInventory[drug] || 0) + amount);
+            return { ...base, inventory: newInventory };
+          }
+          return base;
+        });
+      }
+      
+      return {
+        ...state,
+        bases: newBases
+      };
+    }
+    case 'UPDATE_BASE_CASH': {
+      const { baseId, city, amount } = action;
+      const newBases = { ...state.bases };
+      
+      if (newBases[city]) {
+        newBases[city] = newBases[city].map(base => {
+          if (base.id === baseId) {
+            return { ...base, cashStored: Math.max(0, (base.cashStored || 0) + amount) };
+          }
+          return base;
+        });
+      }
+      
+      return {
+        ...state,
+        bases: newBases
       };
     }
     // Add more cases as needed
@@ -338,6 +530,49 @@ export function GameProvider({ children }) {
     }
   }, [state]);
 
+  // Modal system for notifications
+  const [modalContent, setModalContent] = React.useState({
+    isOpen: false,
+    title: '',
+    content: '',
+    type: 'info'
+  });
+
+  const showModal = (title, content, type = 'info') => {
+    setModalContent({
+      isOpen: true,
+      title,
+      content,
+      type
+    });
+  };
+
+  const hideModal = () => {
+    setModalContent(prev => ({ ...prev, isOpen: false }));
+  };
+
+  // Initialize window.game.ui.modals for systems to use
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.game = window.game || {};
+      window.game.ui = window.game.ui || {};
+      window.game.ui.modals = {
+        alert: (content, title) => {
+          showModal(title, content, 'info');
+        },
+        success: (content, title) => {
+          showModal(title, content, 'success');
+        },
+        warning: (content, title) => {
+          showModal(title, content, 'warning');
+        },
+        error: (content, title) => {
+          showModal(title, content, 'error');
+        }
+      };
+    }
+  }, []);
+
   // --- Daily Game Loop: Advance day and generate base income/drug depletion ---
   useEffect(() => {
     const interval = setInterval(() => {
@@ -391,6 +626,195 @@ export function GameProvider({ children }) {
         dispatch({ type: 'UPDATE_CASH', amount: totalProfit });
       }
       dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
+
+      // --- Heat-based Gang Retaliation Checking ---
+      // Calculate current heat level for the current city
+      const currentCity = state.currentCity;
+      const warrantHeat = Math.min((state.warrant || 0) / 10000, 50);
+      const timeHeat = Math.max(0, (state.daysInCurrentCity || 0) - 3) * 5;
+      const currentHeatLevel = Math.min(100, warrantHeat + timeHeat);
+      
+      // Update heat level in state
+      dispatch({ type: 'UPDATE_HEAT_LEVEL', heatLevel: currentHeatLevel });
+      
+      // Debug logging for heat-based retaliation
+      console.log(`[HEAT DEBUG] Current city: ${currentCity}, Heat level: ${currentHeatLevel.toFixed(1)}% (warrant: ${warrantHeat.toFixed(1)}, time: ${timeHeat.toFixed(1)})`);
+      
+      // Check for gang attacks on bases when heat is 10% or higher
+      if (currentHeatLevel >= 10) {
+        const cityBases = state.bases[currentCity];
+        if (cityBases && Array.isArray(cityBases) && cityBases.length > 0) {
+          // Calculate gang attack chance based on heat level
+          const gangAttackChance = Math.min(0.4, (currentHeatLevel - 10) / 100);
+          
+          console.log(`[HEAT DEBUG] Heat ${currentHeatLevel.toFixed(1)}% >= 10%, checking for gang attack. Chance: ${(gangAttackChance * 100).toFixed(1)}%`);
+          
+          if (Math.random() < gangAttackChance) {
+            console.log(`[HEAT DEBUG] Gang attack triggered!`);
+            // Execute gang attack on the first base in the city
+            const base = cityBases[0];
+            if (base) {
+              // Calculate base defense based on assigned gang and guns
+              const baseDefense = (base.assignedGang || 0) + (base.guns || 0);
+              const baseCash = base.cashStored || 0;
+              const baseInventory = base.inventory || {};
+              
+              // Calculate attack success chance (higher defense = lower success)
+              const attackSuccessChance = Math.max(0.1, 0.8 - (baseDefense * 0.02));
+              const attackSuccessful = Math.random() < attackSuccessChance;
+              
+              console.log(`[HEAT DEBUG] Base defense: ${baseDefense} (${base.assignedGang || 0} gang + ${base.guns || 0} guns), Attack success chance: ${(attackSuccessChance * 100).toFixed(1)}%`);
+              
+              if (attackSuccessful) {
+                // Gang attack successful - steal cash and drugs
+                const cashStolen = Math.floor(baseCash * (0.3 + Math.random() * 0.4)); // 30-70% of cash
+                const drugsStolen = {};
+                
+                Object.keys(baseInventory).forEach(drug => {
+                  const amount = baseInventory[drug] || 0;
+                  const stolen = Math.floor(amount * (0.2 + Math.random() * 0.6)); // 20-80% of drugs
+                  if (stolen > 0) {
+                    drugsStolen[drug] = stolen;
+                    base.inventory[drug] = Math.max(0, amount - stolen);
+                  }
+                });
+                
+                // Update base cash
+                base.cashStored = Math.max(0, baseCash - cashStolen);
+                
+                // Create attack message
+                let attackMessage = `⚔️ Gang attack on your base in ${currentCity}! Lost $${cashStolen.toLocaleString()} cash`;
+                if (Object.keys(drugsStolen).length > 0) {
+                  const drugList = Object.keys(drugsStolen).map(drug => `${drugsStolen[drug]} ${drug}`).join(', ');
+                  attackMessage += ` and ${drugList}`;
+                }
+                
+                console.log(`[HEAT DEBUG] Gang attack successful! Stolen: $${cashStolen} cash, ${Object.keys(drugsStolen).length} drug types`);
+                addNotification(attackMessage, 'error');
+                
+                // Trigger temporary modal notification for successful gang attack
+                if (window.triggerGangAttackNotification) {
+                  let modalContent = `⚔️ <strong>GANG ATTACK!</strong><br><br>`;
+                  modalContent += `<strong>Location:</strong> ${currentCity}<br>`;
+                  modalContent += `<strong>Cash Stolen:</strong> $${cashStolen.toLocaleString()}<br>`;
+                  if (Object.keys(drugsStolen).length > 0) {
+                    const drugList = Object.keys(drugsStolen).map(drug => `${drugsStolen[drug]} ${drug}`).join(', ');
+                    modalContent += `<strong>Drugs Stolen:</strong> ${drugList}<br>`;
+                  }
+                  modalContent += `<br><span style="color: #ff6666;">Your base was successfully raided by rival gangs!</span>`;
+                  
+                  window.triggerGangAttackNotification(modalContent, 'error');
+                }
+                
+              } else {
+                // Gang attack failed - defenders repelled the attack
+                console.log(`[HEAT DEBUG] Gang attack failed - base defended successfully`);
+                addNotification(`⚔️ Gang attack in ${currentCity} repelled! Your base defenses held strong.`, 'success');
+                
+                // Trigger temporary modal notification for successful defense
+                if (window.triggerGangAttackNotification) {
+                  let modalContent = `⚔️ <strong>GANG ATTACK REPELLED!</strong><br><br>`;
+                  modalContent += `<strong>Location:</strong> ${currentCity}<br>`;
+                  modalContent += `<strong>Base Defense:</strong> ${baseDefense} (${base.assignedGang || 0} gang + ${base.guns || 0} guns)<br>`;
+                  modalContent += `<br><span style="color: #66ff66;">Your base defenses held strong against the attack!</span><br>`;
+                  modalContent += `<span style="color: #66ccff;">No losses sustained.</span>`;
+                  
+                  window.triggerGangAttackNotification(modalContent, 'success');
+                }
+              }
+              
+              // Update the base in state
+              dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
+            }
+          } else {
+            console.log(`[HEAT DEBUG] Gang attack check failed (${(gangAttackChance * 100).toFixed(1)}% chance)`);
+          }
+        } else {
+          console.log(`[HEAT DEBUG] No bases in ${currentCity} to attack`);
+        }
+      } else {
+        console.log(`[HEAT DEBUG] Heat ${currentHeatLevel.toFixed(1)}% < 10%, no gang attack check`);
+      }
+
+      // --- Base Raid Checking (existing raid activity based) ---
+      // Check for base raids based on raid activity
+      const cityRaidActivity = state.cityRaidActivity?.[currentCity];
+      const raidCount = cityRaidActivity?.count || 0;
+      
+      // Only check if player has a base in this city
+      if (state.bases[currentCity] && state.bases[currentCity].length > 0) {
+        // Calculate base raid probability based on raid activity
+        // Each raid increases probability by 5%, max 50%
+        const baseRaidChance = Math.min(0.5, raidCount * 0.05);
+        
+        if (Math.random() < baseRaidChance) {
+          // Execute base raid
+          const base = state.bases[currentCity][0]; // Use first base for now
+          if (base) {
+            // Calculate base defense based on assigned gang and guns
+            const baseDefense = (base.assignedGang || 0) + (base.guns || 0);
+            const baseCash = base.cashStored || 0;
+            const baseInventory = base.inventory || {};
+            
+            // Calculate raid success chance (higher defense = lower success)
+            const raidSuccessChance = Math.max(0.1, 0.8 - (baseDefense * 0.02));
+            const raidSuccessful = Math.random() < raidSuccessChance;
+            
+            if (raidSuccessful) {
+              // Base raid successful - steal cash and drugs
+              const cashStolen = Math.floor(baseCash * (0.3 + Math.random() * 0.4)); // 30-70% of cash
+              const drugsStolen = {};
+              
+              Object.keys(baseInventory).forEach(drug => {
+                const amount = baseInventory[drug] || 0;
+                const stolen = Math.floor(amount * (0.2 + Math.random() * 0.6)); // 20-80% of drugs
+                if (stolen > 0) {
+                  drugsStolen[drug] = stolen;
+                  base.inventory[drug] = Math.max(0, amount - stolen);
+                }
+              });
+              
+              // Update base cash
+              base.cashStored = Math.max(0, baseCash - cashStolen);
+              
+              // Create raid message
+              let raidMessage = `🏢 Your base in ${currentCity} was raided! Lost $${cashStolen.toLocaleString()} cash`;
+              if (Object.keys(drugsStolen).length > 0) {
+                const drugList = Object.keys(drugsStolen).map(drug => `${drugsStolen[drug]} ${drug}`).join(', ');
+                raidMessage += ` and ${drugList}`;
+              }
+              
+              addNotification(raidMessage, 'error');
+              
+              // Reset raid activity for this city (successful raid cools down the area)
+              dispatch({ 
+                type: 'UPDATE_CITY_RAID_ACTIVITY', 
+                city: currentCity, 
+                activity: { count: 0, lastRaid: 0 } 
+              });
+              
+            } else {
+              // Base raid failed - defenders repelled the attack
+              addNotification(`🏢 Base raid in ${currentCity} repelled! Your defenses held strong.`, 'success');
+              
+              // Reduce raid activity slightly (failed raid still cools down the area a bit)
+              if (cityRaidActivity && cityRaidActivity.count > 0) {
+                dispatch({ 
+                  type: 'UPDATE_CITY_RAID_ACTIVITY', 
+                  city: currentCity, 
+                  activity: { 
+                    count: Math.max(0, cityRaidActivity.count - 1), 
+                    lastRaid: cityRaidActivity.lastRaid 
+                  } 
+                });
+              }
+            }
+            
+            // Update the base in state
+            dispatch({ type: 'UPDATE_BASES', bases: updatedBases });
+          }
+        }
+      }
     }, 60000); // 60 seconds
     return () => clearInterval(interval);
   }, [state, dispatch]);
@@ -462,6 +886,7 @@ export function GameProvider({ children }) {
     const asset = gameData.assets.find((a) => a.id === assetId);
     if (!asset) return { success: false, error: 'Asset not found' };
     if (state.cash < asset.cost) return { success: false, error: 'Not enough cash' };
+    
     // --- Storage checks for jewelry/cars ---
     if (asset.type === 'jewelry') {
       // Count worn + stored jewelry
@@ -494,6 +919,7 @@ export function GameProvider({ children }) {
         return { success: false, error: `Car storage full! Buy more property to store more cars.` };
       }
     }
+    
     // --- Assign cityPurchased and storagePropertyId ---
     const instanceId = `${assetId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     let storagePropertyId = undefined;
@@ -537,6 +963,7 @@ export function GameProvider({ children }) {
         storagePropertyId = properties[0].instanceId;
       }
     }
+    
     const assetData = {
       ...asset,
       instanceId,
@@ -546,8 +973,9 @@ export function GameProvider({ children }) {
       cityPurchased: state.currentCity,
       storagePropertyId,
     };
-    dispatch({ type: 'BUY_ASSET', assetId, assetData });
-    addNotification(`Purchased ${asset.name} for $${asset.cost.toLocaleString()}`, 'success');
+    
+    dispatch({ type: 'BUY_ASSET', assetId, assetData, city: state.currentCity });
+    addNotification(`Purchased ${asset.name} in ${state.currentCity} for $${asset.cost.toLocaleString()}`, 'success');
     return { success: true };
   };
 
@@ -560,20 +988,27 @@ export function GameProvider({ children }) {
     let cityPurchased = '';
     let storagePropertyId = '';
     let isWorn = false;
-    for (const [id, arr] of Object.entries(state.assets.owned)) {
-      const inst = (arr).find(a => a.instanceId === instanceId);
-      if (inst) {
-        assetId = id;
-        resaleValue = inst.resaleValue;
-        assetName = inst.name;
-        assetType = inst.type;
-        cityPurchased = inst.cityPurchased;
-        storagePropertyId = inst.storagePropertyId;
-        isWorn = state.assets.wearing.jewelry.includes(instanceId);
-        break;
+    
+    // Search through all cities for the asset
+    for (const [cityName, cityAssets] of Object.entries(state.assets.owned)) {
+      for (const [id, arr] of Object.entries(cityAssets)) {
+        const inst = arr.find(a => a.instanceId === instanceId);
+        if (inst) {
+          assetId = id;
+          resaleValue = inst.resaleValue;
+          assetName = inst.name;
+          assetType = inst.type;
+          cityPurchased = inst.cityPurchased || cityName;
+          storagePropertyId = inst.storagePropertyId;
+          isWorn = state.assets.wearing.jewelry.includes(instanceId);
+          break;
+        }
       }
+      if (assetId) break;
     }
+    
     if (!assetId) return { success: false, error: 'Asset not found' };
+    
     // --- Enforce city rules ---
     if (assetType === 'jewelry') {
       if (!isWorn && state.currentCity !== cityPurchased) {
@@ -584,36 +1019,113 @@ export function GameProvider({ children }) {
         return { success: false, error: `You must be in ${cityPurchased} to sell this ${assetType}.` };
       }
     }
-    dispatch({ type: 'SELL_ASSET', instanceId, assetId, resaleValue });
-    addNotification(`Sold ${assetName} for $${resaleValue.toLocaleString()}`, 'success');
+    
+    dispatch({ type: 'SELL_ASSET', instanceId, assetId, resaleValue, city: cityPurchased });
+    addNotification(`Sold ${assetName} from ${cityPurchased} for $${resaleValue.toLocaleString()}`, 'success');
     return { success: true };
   };
+  
   const wearJewelry = (instanceId) => {
     dispatch({ type: 'WEAR_JEWELRY', instanceId });
     return { success: true };
   };
+  
   const removeJewelry = (instanceId) => {
     dispatch({ type: 'REMOVE_JEWELRY', instanceId });
     return { success: true };
   };
-  const getOwnedAssets = (type) => {
+  
+  const getOwnedAssets = (type, city = null) => {
     // type: 'jewelry', 'car', 'property', etc.
-    const owned = state.assets.owned;
+    const owned = state.assets?.owned;
     const result = {};
-    for (const [id, arr] of Object.entries(owned)) {
-      const asset = gameData.assets.find((a) => a.id === id);
-      if (asset && asset.type === type) {
-        result[id] = arr;
-      }
+    
+    // Safety check for assets structure
+    if (!owned) {
+      return result;
     }
+    
+    // Handle legacy structure (assets.owned is an array)
+    if (Array.isArray(owned)) {
+      owned.forEach(instance => {
+        if (instance && typeof instance === 'object') {
+          const asset = gameData.assets.find((a) => a.id === instance.id);
+          if (asset && asset.type === type) {
+            if (!result[instance.id]) result[instance.id] = [];
+            result[instance.id].push(instance);
+          }
+        }
+      });
+      return result;
+    }
+    
+    // Handle new city-based structure
+    const citiesToCheck = city ? [city] : Object.keys(owned);
+    
+    citiesToCheck.forEach(cityName => {
+      if (!owned[cityName]) return;
+      
+      for (const [id, arr] of Object.entries(owned[cityName])) {
+        if (Array.isArray(arr)) {
+          const asset = gameData.assets.find((a) => a.id === id);
+          if (asset && asset.type === type) {
+            if (!result[id]) result[id] = [];
+            result[id].push(...arr);
+          }
+        }
+      }
+    });
+    
     return result;
   };
-  const getAllOwnedInstances = () => {
-    return Object.values(state.assets.owned).flat();
+  
+  const getAllOwnedInstances = (type = null, city = null) => {
+    const owned = state.assets?.owned;
+    const allInstances = [];
+    
+    // Safety check for assets structure
+    if (!owned) {
+      return allInstances;
+    }
+    
+    // Handle legacy structure (assets.owned is an array)
+    if (Array.isArray(owned)) {
+      owned.forEach(instance => {
+        if (instance && typeof instance === 'object') {
+          if (!type || instance.type === type) {
+            allInstances.push(instance);
+          }
+        }
+      });
+      return allInstances;
+    }
+    
+    // Handle new city-based structure
+    const citiesToCheck = city ? [city] : Object.keys(owned);
+    
+    citiesToCheck.forEach(cityName => {
+      if (!owned[cityName]) return;
+      
+      Object.values(owned[cityName]).forEach(instances => {
+        if (Array.isArray(instances)) {
+          instances.forEach(instance => {
+            if (instance && typeof instance === 'object') {
+              if (!type || instance.type === type) {
+                allInstances.push(instance);
+              }
+            }
+          });
+        }
+      });
+    });
+    
+    return allInstances;
   };
+  
   const getWornJewelry = () => {
-    return state.assets.wearing.jewelry;
+    return state.assets?.wearing?.jewelry || [];
   };
+  
   /**
    * Returns a summary of the player's assets.
    * @returns {{ totalValue: number, flexScore: number }}
@@ -621,13 +1133,49 @@ export function GameProvider({ children }) {
   const getAssetSummary = () => {
     let totalValue = 0;
     let flexScore = 0;
-    for (const arr of Object.values(state.assets.owned)) {
-      for (const inst of arr) {
-        totalValue += inst.resaleValue || 0;
-        flexScore += inst.flexScore || 0;
+    
+    // Safety check for assets structure
+    if (!state.assets || !state.assets.owned) {
+      return { totalValue, flexScore };
+    }
+    
+    // Handle both old and new data structures
+    if (Array.isArray(state.assets.owned)) {
+      // Legacy structure - assets.owned is an array
+      for (const inst of state.assets.owned) {
+        if (inst && typeof inst === 'object') {
+          totalValue += inst.resaleValue || 0;
+          flexScore += inst.flexScore || 0;
+        }
+      }
+    } else {
+      // New city-based structure
+      for (const cityAssets of Object.values(state.assets.owned)) {
+        if (cityAssets && typeof cityAssets === 'object') {
+          for (const instances of Object.values(cityAssets)) {
+            if (Array.isArray(instances)) {
+              for (const inst of instances) {
+                if (inst && typeof inst === 'object') {
+                  totalValue += inst.resaleValue || 0;
+                  flexScore += inst.flexScore || 0;
+                }
+              }
+            }
+          }
+        }
       }
     }
+    
     return { totalValue, flexScore };
+  };
+  
+  /**
+   * Get assets owned in a specific city
+   * @param {string} city
+   * @returns {Object} - Returns arrays of asset instances by asset ID for the specified city
+   */
+  const getAssetsInCity = (city) => {
+    return getOwnedAssets(null, city);
   };
 
   // --- Notification Actions & Selectors ---
@@ -674,7 +1222,7 @@ export function GameProvider({ children }) {
   }
   function getAvailableGunsInCity(city) {
     // Unassigned guns in a specific city
-    const totalInCity = (state.gunsByCity && state.gunsByCity[city]) || (state.guns || 0);
+    const totalInCity = (state.gunsByCity && state.gunsByCity[city]) || 0;
     let assignedInCity = 0;
     const cityBases = (state.bases && state.bases[city]) || [];
     (cityBases).forEach((base) => {
@@ -685,33 +1233,154 @@ export function GameProvider({ children }) {
 
   // --- Raid System Integration ---
   const raidSystemRef = React.useRef(null);
-  if (!raidSystemRef.current) {
-    // Minimal event logger for RaidSystem
-    const events = {
-      add: (msg, type) => addNotification(msg, type),
-    };
-    // Provide a minimal state interface for RaidSystem
-    const raidState = {
-      getAvailableGangMembersInCity: (city) => getAvailableGangMembersInCity(city),
-      getAvailableGunsInCity: (city) => getAvailableGunsInCity(city),
-      updateCash: (amount) => updateCash(amount),
-      updateInventory: (drug, amount) => updateInventory(drug, amount),
-      updateWarrant: (amount) => dispatch({ type: 'UPDATE_CASH', amount: 0 }), // stub, implement if needed
-      trackAchievement: () => {}, // stub
-      addNotification: (msg, type) => addNotification(msg, type),
-      incrementCityRaidActivity: () => {}, // stub
-    };
-    raidSystemRef.current = new RaidSystem(raidState, events, gameData);
-  }
+  const baseDefenseSystemRef = React.useRef(null);
+  
+  // Initialize RaidSystem only once
+  React.useEffect(() => {
+    if (!raidSystemRef.current) {
+      console.log('[RAID DEBUG] Initializing RaidSystem');
+      // Minimal event logger for RaidSystem
+      const events = {
+        add: (msg, type) => addNotification(msg, type),
+      };
+      // Provide a minimal state interface for RaidSystem
+      const raidState = {
+        getAvailableGangMembersInCity: (city) => getAvailableGangMembersInCity(city),
+        getAvailableGunsInCity: (city) => getAvailableGunsInCity(city),
+        updateCash: (amount) => updateCash(amount),
+        updateInventory: (drug, amount) => updateInventory(drug, amount),
+        updateWarrant: (amount) => {
+          console.log(`[WARRANT DEBUG] Updating warrant by ${amount} (current: ${state.warrant || 0})`);
+          dispatch({ type: 'UPDATE_WARRANT', amount });
+        },
+        trackAchievement: () => {}, // stub
+        addNotification: (msg, type) => addNotification(msg, type),
+        getCityRaidActivity: (city) => getCityRaidActivity(city),
+        getCash: () => state.cash || 0,
+        removeGangMembersFromCity: (city, amount) => {
+          // Remove gang members from the specified city
+          const currentGang = state.gangMembers[city] || 0;
+          const newGang = Math.max(0, currentGang - amount);
+          dispatch({
+            type: 'UPDATE_GANG_MEMBERS',
+            city,
+            amount: newGang - currentGang // Negative amount to reduce
+          });
+        },
+        removeGunsFromCity: (city, amount) => {
+          // Remove guns from the specified city
+          const currentGuns = state.gunsByCity[city] || 0;
+          const newGuns = Math.max(0, currentGuns - amount);
+          dispatch({
+            type: 'UPDATE_GUNS_BY_CITY',
+            city,
+            amount: newGuns - currentGuns // Negative amount to reduce
+          });
+        },
+        incrementCityRaidActivity: (city) => {
+          const currentActivity = getCityRaidActivity(city);
+          const newActivity = {
+            count: currentActivity.count + 1,
+            lastRaid: Date.now()
+          };
+          console.log(`[RAID ACTIVITY] Incrementing raid activity for ${city}: ${currentActivity.count} -> ${newActivity.count}`);
+          dispatch({
+            type: 'UPDATE_CITY_RAID_ACTIVITY',
+            city,
+            activity: newActivity
+          });
+        },
+      };
+      raidSystemRef.current = new RaidSystem(raidState, events, gameData);
+      console.log('[RAID DEBUG] RaidSystem initialized');
+      
+      // Initialize BaseDefenseSystem
+      const baseDefenseState = {
+        get: (key) => state[key],
+        getCash: () => state.cash,
+        getGangMembersInCity: (city) => state.gangMembers[city] || 0,
+        getGunsInCity: (city) => state.gunsByCity[city] || 0,
+        updateGangMembersInCity: (city, amount) => {
+          dispatch({
+            type: 'UPDATE_GANG_MEMBERS',
+            city,
+            amount: amount - (state.gangMembers[city] || 0)
+          });
+        },
+        updateGunsInCity: (city, amount) => {
+          dispatch({
+            type: 'UPDATE_GUNS_BY_CITY',
+            city,
+            amount: amount - (state.gunsByCity[city] || 0)
+          });
+        },
+        getCityRaidActivity: (city) => getCityRaidActivity(city),
+        addNotification: (message, type) => {
+          addNotification(message, type);
+        },
+        updateBaseInventory: (baseId, city, drug, amount) => {
+          dispatch({
+            type: 'UPDATE_BASE_INVENTORY',
+            baseId,
+            city,
+            drug,
+            amount
+          });
+        },
+        updateBaseCash: (baseId, city, amount) => {
+          dispatch({
+            type: 'UPDATE_BASE_CASH',
+            baseId,
+            city,
+            amount
+          });
+        }
+      };
+      
+      const baseDefenseEvents = {
+        add: (message, type) => {
+          addNotification(message, type);
+        }
+      };
+      
+      baseDefenseSystemRef.current = new BaseDefenseSystem(baseDefenseState, baseDefenseEvents, gameData);
+      console.log('[BASE DEFENSE DEBUG] BaseDefenseSystem initialized');
+    }
+  }, []); // Empty dependency array ensures this runs only once
+  
+  // Periodic base raid checks
+  React.useEffect(() => {
+    if (!baseDefenseSystemRef.current) return;
+    
+    // Check for base raids every 30 seconds
+    const interval = setInterval(() => {
+      checkForBaseRaids();
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(interval);
+  }, []); // Empty dependency array - effect runs once and checks ref inside
+  
   const raidSystem = raidSystemRef.current;
+  const baseDefenseSystem = baseDefenseSystemRef.current;
 
   // --- Raid Selectors & Actions (using RaidSystem) ---
   function getAvailableRaidTargets(city) {
-    return raidSystem.getAvailableTargets(city);
+    // Return all targets, including those on cooldown - the UI will handle displaying them properly
+    if (!raidSystemRef.current) {
+      console.warn('[RAID DEBUG] RaidSystem not initialized yet');
+      return [];
+    }
+    return raidSystemRef.current.enemyBases[city] || [];
   }
   function executeRaid(targetId, raidGangSize, city) {
+    if (!raidSystemRef.current) {
+      console.warn('[RAID DEBUG] RaidSystem not initialized yet');
+      return { success: false, error: 'Raid system not ready' };
+    }
     // The RaidSystem will handle cooldown and all logic
-    return raidSystem.executeRaid(targetId, raidGangSize);
+    const result = raidSystemRef.current.executeRaid(targetId, raidGangSize);
+    
+    return result;
   }
   function calculateRaidSuccess(raidGangSize, guns, difficulty, enemyGang) {
     // Simple formula: more gang/guns = higher chance, higher difficulty/enemy = lower
@@ -729,16 +1398,24 @@ export function GameProvider({ children }) {
     return 'Hard';
   }
   function getAllRaidTargets(city) {
-    // Only return targets not on cooldown
-    const allTargets = raidSystem.enemyBases[city] || [];
-    const currentTime = Date.now();
-    const cooldownPeriod = 5 * 60 * 1000;
-    return allTargets.filter(target => (currentTime - target.lastRaid) >= cooldownPeriod);
+    // Return all targets, including those on cooldown - the UI will handle displaying them properly
+    if (!raidSystemRef.current) {
+      console.warn('[RAID DEBUG] RaidSystem not initialized yet');
+      return [];
+    }
+    const allTargets = raidSystemRef.current.enemyBases[city] || [];
+    return allTargets;
   }
   function isRaidTargetOnCooldown(target) {
     const currentTime = Date.now();
     const cooldownPeriod = 5 * 60 * 1000;
-    return (currentTime - target.lastRaid) < cooldownPeriod;
+    const isOnCooldown = (currentTime - target.lastRaid) < cooldownPeriod;
+    console.log('[CONTEXT DEBUG] isRaidTargetOnCooldown for target:', target.id);
+    console.log('[CONTEXT DEBUG] Current time:', currentTime);
+    console.log('[CONTEXT DEBUG] Last raid time:', target.lastRaid);
+    console.log('[CONTEXT DEBUG] Time since last raid:', currentTime - target.lastRaid);
+    console.log('[CONTEXT DEBUG] Is on cooldown:', isOnCooldown);
+    return isOnCooldown;
   }
 
   // --- Utility: Raid Activity ---
@@ -749,10 +1426,180 @@ export function GameProvider({ children }) {
     return state.cityRaidActivity[city];
   }
 
+  function incrementCityRaidActivity(city) {
+    const currentActivity = getCityRaidActivity(city);
+    const newActivity = {
+      count: currentActivity.count + 1,
+      lastRaid: Date.now()
+    };
+    console.log(`[RAID ACTIVITY] Incrementing raid activity for ${city}: ${currentActivity.count} -> ${newActivity.count}`);
+    dispatch({
+      type: 'UPDATE_CITY_RAID_ACTIVITY',
+      city,
+      activity: newActivity
+    });
+  }
+
+  // --- Base Defense System Integration ---
+  function checkForBaseRaids() {
+    if (!baseDefenseSystemRef.current) {
+      console.warn('[BASE DEFENSE DEBUG] BaseDefenseSystem not initialized yet');
+      return;
+    }
+    baseDefenseSystemRef.current.checkForBaseRaids();
+  }
+
+  function executeBaseRaid(baseId) {
+    if (!baseDefenseSystemRef.current) {
+      console.warn('[BASE DEFENSE DEBUG] BaseDefenseSystem not initialized yet');
+      return { success: false, error: 'Base defense system not ready' };
+    }
+    return baseDefenseSystemRef.current.executeBaseRaid(baseId);
+  }
+
+  function calculateBaseRaidProbability(city, base) {
+    if (!baseDefenseSystemRef.current) {
+      console.warn('[BASE DEFENSE DEBUG] BaseDefenseSystem not initialized yet');
+      return 0;
+    }
+    return baseDefenseSystemRef.current.calculateRaidProbability(city, base);
+  }
+
   // --- Utility: Base Check ---
   function hasBaseInCity(city) {
-    const cityBases = state.bases[city];
-    return cityBases && Array.isArray(cityBases) && cityBases.length > 0;
+    return state.bases[city] && state.bases[city].length > 0;
+  }
+
+  // --- Base Upgrade Function with Heat Warnings ---
+  function upgradeBase(baseId, oldLevel, newLevel, city) {
+    dispatch({
+      type: 'UPGRADE_BASE',
+      baseId,
+      oldLevel,
+      newLevel,
+      city
+    });
+  }
+
+  // --- Heat System Integration ---
+  function calculateHeatLevel() {
+    const warrantHeat = Math.min((state.warrant || 0) / 10000, 50);
+    const timeHeat = Math.max(0, (state.daysInCurrentCity || 1) - 3) * 5;
+    
+    // Add gang retaliation heat based on raid activity
+    const currentCity = state.currentCity;
+    const cityRaidActivity = getCityRaidActivity(currentCity);
+    const raidCount = cityRaidActivity.count || 0;
+    const gangRetaliationHeat = Math.min(30, raidCount * 8);
+    
+    // Add base and gang heat
+    const bases = state.bases || {};
+    const gangMembers = state.gangMembers || {};
+    let baseGangHeat = 0;
+    
+    // Calculate heat from bases
+    Object.values(bases).forEach(cityBases => {
+      if (Array.isArray(cityBases)) {
+        cityBases.forEach(base => {
+          if (base && base.level) {
+            // Base heat: 2% per level, max 20% per base
+            const baseHeat = Math.min(20, base.level * 2);
+            baseGangHeat += baseHeat;
+            
+            // Additional heat for Drug Fortress (level 4)
+            if (base.level >= 4) {
+              baseGangHeat += 10;
+            }
+          }
+        });
+      }
+    });
+    
+    // Calculate heat from gang members
+    const totalGangMembers = Object.values(gangMembers).reduce((sum, count) => sum + (count || 0), 0);
+    const gangHeat = Math.min(25, Math.floor(totalGangMembers / 10) * 0.5);
+    baseGangHeat += gangHeat;
+    
+    // Additional heat for large gangs
+    if (totalGangMembers >= 50) {
+      baseGangHeat += 5;
+    }
+    if (totalGangMembers >= 100) {
+      baseGangHeat += 10;
+    }
+    
+    const totalHeat = warrantHeat + timeHeat + gangRetaliationHeat + Math.min(50, baseGangHeat);
+    return Math.min(100, totalHeat);
+  }
+
+  function getHeatBreakdown() {
+    const warrantHeat = Math.min((state.warrant || 0) / 10000, 50);
+    const timeHeat = Math.max(0, (state.daysInCurrentCity || 1) - 3) * 5;
+    
+    const currentCity = state.currentCity;
+    const cityRaidActivity = getCityRaidActivity(currentCity);
+    const raidCount = cityRaidActivity.count || 0;
+    const gangRetaliationHeat = Math.min(30, raidCount * 8);
+    
+    const bases = state.bases || {};
+    const gangMembers = state.gangMembers || {};
+    const totalGangMembers = Object.values(gangMembers).reduce((sum, count) => sum + (count || 0), 0);
+    
+    const baseHeatDetails = [];
+    Object.values(bases).forEach(cityBases => {
+      if (Array.isArray(cityBases)) {
+        cityBases.forEach(base => {
+          if (base && base.level) {
+            const baseHeat = Math.min(20, base.level * 2);
+            let fortressBonus = 0;
+            if (base.level >= 4) {
+              fortressBonus = 10;
+            }
+            baseHeatDetails.push({
+              city: base.city,
+              level: base.level,
+              baseHeat: baseHeat,
+              fortressBonus: fortressBonus,
+              totalHeat: baseHeat + fortressBonus
+            });
+          }
+        });
+      }
+    });
+    
+    const gangHeat = Math.min(25, Math.floor(totalGangMembers / 10) * 0.5);
+    let largeGangBonus = 0;
+    let massiveGangBonus = 0;
+    
+    if (totalGangMembers >= 100) {
+      massiveGangBonus = 10;
+    } else if (totalGangMembers >= 50) {
+      largeGangBonus = 5;
+    }
+    
+    const baseGangHeat = baseHeatDetails.reduce((sum, detail) => sum + detail.totalHeat, 0) + gangHeat + largeGangBonus + massiveGangBonus;
+    
+    return {
+      warrantHeat: Math.round(warrantHeat),
+      timeHeat: Math.round(timeHeat),
+      gangRetaliationHeat: Math.round(gangRetaliationHeat),
+      baseGangHeat: Math.round(baseGangHeat),
+      totalHeat: Math.round(warrantHeat + timeHeat + gangRetaliationHeat + baseGangHeat),
+      breakdown: {
+        warrantHeat,
+        timeHeat,
+        gangRetaliationHeat,
+        baseGangHeat,
+        baseHeatDetails,
+        gangHeat: {
+          totalMembers: totalGangMembers,
+          baseHeat: gangHeat,
+          largeGangBonus,
+          massiveGangBonus,
+          totalHeat: gangHeat + largeGangBonus + massiveGangBonus
+        }
+      }
+    };
   }
 
   // --- Context Value ---
@@ -792,10 +1639,108 @@ export function GameProvider({ children }) {
     getDifficultyColor,
     getDifficultyText,
     getCityRaidActivity,
+    incrementCityRaidActivity,
     hasBaseInCity,
+    showModal,
+    hideModal,
+    modalContent,
+    upgradeBase,
+    calculateHeatLevel,
+    getHeatBreakdown,
+    checkForBaseRaids,
+    executeBaseRaid,
+    calculateBaseRaidProbability
   };
 
-  return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
+  return (
+    <GameContext.Provider value={value}>
+      {children}
+      {/* Global Modal */}
+      {modalContent.isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            zIndex: 999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+        >
+          <div
+            style={{
+              background: '#222',
+              color: '#fff',
+              borderRadius: '10px',
+              padding: '24px',
+              maxWidth: '90vw',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 4px 32px rgba(0,0,0,0.3)',
+              position: 'relative'
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '12px'
+            }}>
+              <div style={{
+                fontWeight: 'bold',
+                fontSize: '1.2em',
+                color: modalContent.type === 'error' ? '#ff6666' : 
+                       modalContent.type === 'success' ? '#66ff66' : 
+                       modalContent.type === 'warning' ? '#ffcc66' : '#66ccff'
+              }}>
+                {modalContent.title}
+              </div>
+              <button
+                onClick={hideModal}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '1.5em',
+                  cursor: 'pointer',
+                  padding: '0',
+                  width: '30px',
+                  height: '30px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div 
+              style={{ marginTop: '8px' }}
+              dangerouslySetInnerHTML={{ __html: modalContent.content }}
+            />
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <button
+                onClick={hideModal}
+                className="action-btn"
+                style={{
+                  background: modalContent.type === 'error' ? '#ff6666' : 
+                             modalContent.type === 'success' ? '#66ff66' : 
+                             modalContent.type === 'warning' ? '#ffcc66' : '#66ccff'
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </GameContext.Provider>
+  );
 }
 
 // --- Hooks ---
