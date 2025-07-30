@@ -472,7 +472,8 @@ export default function BasesScreen({ onNavigate }: BasesScreenProps) {
     const requiredGuns = baseType?.gunsRequired || 2;
     const hasEnoughGang = (base.assignedGang || 0) >= requiredGang;
     const hasEnoughGuns = (base.guns || 0) >= requiredGuns;
-    const isOperating = hasEnoughGang && hasEnoughGuns;
+    const hasDrugs = base.inventory && Object.values(base.inventory).some(amount => amount > 0);
+    const isOperating = hasEnoughGang && hasEnoughGuns && hasDrugs;
     
     // Calculate accumulated income (max 24 hours)
     const accumulatedHours = Math.min(timeSinceLastCollect, 24);
