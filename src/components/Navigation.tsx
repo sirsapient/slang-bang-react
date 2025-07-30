@@ -64,7 +64,7 @@ export default function Navigation({ currentScreen, onNavigate, onSellAll }: Nav
           style={{ flex: 1, minWidth: 0, background: '#ff6600', color: '#fff', fontWeight: 'bold', marginLeft: 8 }}
           onClick={() => {
             // Check if this is a tutorial click for Sell All button
-            if (activeTutorial === 'gettingStarted' && stepIndex === 11) {
+            if (activeTutorial === 'gettingStarted' && stepIndex === 10) {
               const step = tutorialSteps[activeTutorial][stepIndex];
               if (step && step.requireClick) {
                 nextStep();

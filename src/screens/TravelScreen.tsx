@@ -20,21 +20,6 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
   const [showArrestModal, setShowArrestModal] = useState(false);
   const [arrestData, setArrestData] = useState<any>(null);
   
-  // Handle tutorial navigation back to home
-  useEffect(() => {
-    if (activeTutorial === 'gettingStarted' && stepIndex === 9) {
-      const step = tutorialSteps[activeTutorial][stepIndex];
-      if (step && step.id === 'return-home') {
-        console.log('Tutorial: Navigating back to home for trading button step');
-        // Navigate back to home after a short delay to show the message
-        setTimeout(() => {
-          onNavigate('home');
-          nextStep();
-        }, 2000);
-      }
-    }
-  }, [activeTutorial, stepIndex, tutorialSteps, onNavigate, nextStep]);
-  
   // Calculate heat level text
   const getHeatLevelText = () => {
     const heat = state.heatLevel;
@@ -51,6 +36,7 @@ export default function TravelScreen({ onNavigate }: TravelScreenProps) {
     if (activeTutorial === 'gettingStarted' && stepIndex === 8 && cityName === 'Chicago') {
       const step = tutorialSteps[activeTutorial][stepIndex];
       if (step && step.requireClick) {
+        console.log('Tutorial: Chicago button clicked, advancing to next step');
         nextStep();
       }
     }

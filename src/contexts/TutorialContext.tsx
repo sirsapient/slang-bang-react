@@ -54,11 +54,7 @@ const tutorialSteps = {
     },
     {
       id: 'return-home',
-      message: "Great! Now let's head back to the Home screen to access the Trading button.",
-    },
-    {
-      id: 'trading-button-highlight',
-      message: "Now let's sell your weed in Chicago! Click the Trading button to access the trading screen.",
+      message: "Great! Now let's head back to the Home screen to access the Trading button. Click the Trading button to continue.",
       highlightElement: 'trading-button',
       requireClick: true,
     },
@@ -250,6 +246,8 @@ interface TutorialContextType {
   resetTutorial: (tutorialKey: string) => void;
   setStepIndex: (index: number) => void;
   hasSeenFirstAssetsModal: boolean;
+  stepReadyElement: string | null;
+  notifyStepReady: (elementId: string) => void;
 }
 
 const TutorialContext = createContext<TutorialContextType | undefined>(undefined);
@@ -264,6 +262,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const [activeTutorial, setActiveTutorial] = useState<string | null>(null);
   // Track current step index within the active tutorial
   const [stepIndex, setStepIndex] = useState(0);
+  const [stepReadyElement, setStepReadyElement] = useState<string | null>(null);
   // Track if user has seen first assets modal but hasn't completed tutorial
   const [hasSeenFirstAssetsModal, setHasSeenFirstAssetsModal] = useState(false);
 
@@ -273,30 +272,33 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
 
   // Start a tutorial by key
   const startTutorial = useCallback((key: string) => {
+    console.log('Starting tutorial:', key);
     setActiveTutorial(key);
     setStepIndex(0);
+    setStepReadyElement(null);
   }, []);
 
   // Advance to next step
   const nextStep = useCallback(() => {
+    console.log('[DEBUG] nextStep called', { activeTutorial, stepIndex });
+    console.trace();
     if (!activeTutorial) return;
-    const steps = tutorialSteps[activeTutorial as keyof typeof tutorialSteps];
-    if (stepIndex < steps.length - 1) {
+    
+    const currentSteps = tutorialSteps[activeTutorial as keyof typeof tutorialSteps];
+    if (stepIndex < currentSteps.length - 1) {
+      console.log('Tutorial nextStep called:', { activeTutorial, stepIndex });
+      console.log('Advancing to step:', stepIndex + 1);
       setStepIndex(stepIndex + 1);
+      setStepReadyElement(null); // Reset step ready element when advancing
     } else {
-      // Complete tutorial
-      setProgress((prev) => ({ ...prev, [activeTutorial]: true }));
-      setActiveTutorial(null);
-      setStepIndex(0);
-      // Clear the flag when tutorial is completed
-      if (activeTutorial === 'assetsTutorial') {
-        setHasSeenFirstAssetsModal(false);
-      }
+      console.log('Tutorial completed, skipping');
+      skipTutorial();
     }
   }, [activeTutorial, stepIndex]);
 
   // Skip tutorial
   const skipTutorial = useCallback(() => {
+    console.log('Skipping tutorial:', activeTutorial);
     if (activeTutorial) {
       // If skipping from the first step of gettingStarted, only mark gettingStarted as completed
       if (activeTutorial === 'gettingStarted' && stepIndex === 0) {
@@ -310,44 +312,59 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
       }
       setActiveTutorial(null);
       setStepIndex(0);
+      setStepReadyElement(null);
     }
   }, [activeTutorial, stepIndex]);
 
   // Reset all tutorials (for testing)
   const resetTutorials = useCallback(() => {
-    setProgress({ ...defaultProgress });
+    console.log('Resetting all tutorials');
     setActiveTutorial(null);
     setStepIndex(0);
+    setStepReadyElement(null);
+    setHasSeenFirstAssetsModal(false);
   }, []);
 
   // Reset specific tutorial (for testing)
   const resetTutorial = useCallback((tutorialKey: string) => {
-    setProgress((prev: any) => {
-      const newProgress = { ...prev, [tutorialKey]: false };
-      // Also update localStorage immediately
-      localStorage.setItem('tutorialProgress', JSON.stringify(newProgress));
-      return newProgress;
-    });
+    console.log('Resetting tutorial:', tutorialKey);
     if (activeTutorial === tutorialKey) {
       setActiveTutorial(null);
       setStepIndex(0);
+      setStepReadyElement(null);
     }
   }, [activeTutorial]);
 
+  const setStepIndexManually = useCallback((index: number) => {
+    console.log('Setting step index manually:', index);
+    setStepIndex(index);
+    setStepReadyElement(null);
+  }, []);
+
+  const notifyStepReady = useCallback((elementId: string) => {
+    console.log('Step ready notification:', elementId);
+    setStepReadyElement(elementId);
+  }, []);
+
+  const value = {
+    progress,
+    activeTutorial,
+    stepIndex,
+    tutorialSteps,
+    startTutorial,
+    nextStep,
+    skipTutorial,
+    resetTutorials,
+    resetTutorial,
+    setStepIndex: setStepIndexManually,
+    hasSeenFirstAssetsModal,
+    setHasSeenFirstAssetsModal,
+    stepReadyElement,
+    notifyStepReady,
+  };
+
   return (
-    <TutorialContext.Provider value={{
-      progress,
-      activeTutorial,
-      stepIndex,
-      tutorialSteps,
-      startTutorial,
-      nextStep,
-      skipTutorial,
-      resetTutorials,
-      resetTutorial,
-      setStepIndex,
-      hasSeenFirstAssetsModal,
-    }}>
+    <TutorialContext.Provider value={value}>
       {children}
     </TutorialContext.Provider>
   );

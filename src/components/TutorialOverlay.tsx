@@ -54,7 +54,7 @@ const buttonStyle: React.CSSProperties = {
 };
 
 export default function TutorialOverlay() {
-  const { activeTutorial, stepIndex, tutorialSteps, nextStep, skipTutorial } = useTutorial();
+  const { activeTutorial, stepIndex, tutorialSteps, nextStep, skipTutorial, stepReadyElement } = useTutorial();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Always call useEffect, even if there's no active tutorial
@@ -221,8 +221,10 @@ export default function TutorialOverlay() {
           
           // Store the event listener for cleanup
           (targetElement as any)._tutorialClickHandler = handleClick;
-        } else if (activeTutorial === 'gettingStarted' && stepIndex === 10 && step.highlightElement === 'trading-button') {
-          // Make the trading button prominent and clickable (minimal glow, contained effect)
+        } else if (activeTutorial === 'gettingStarted' && stepIndex === 9 && step.highlightElement === 'trading-button' && stepReadyElement === 'trading-button') {
+          console.log('Setting up trading button tutorial highlighting (step ready)');
+          
+          // Make the trading button prominent and clickable (same as market button)
           targetElement.style.zIndex = '1007';
           targetElement.style.position = 'relative';
           targetElement.style.transform = 'scale(1.01)';
@@ -232,6 +234,82 @@ export default function TutorialOverlay() {
           targetElement.style.filter = 'none';
           targetElement.style.pointerEvents = 'auto';
           targetElement.style.cursor = 'pointer';
+          
+          // Force all children to be clickable
+          const children = targetElement.querySelectorAll('*');
+          children.forEach(child => {
+            if (child instanceof HTMLElement) {
+              child.style.pointerEvents = 'auto';
+              child.style.cursor = 'pointer';
+            }
+          });
+          
+          // Create a transparent cutout around the trading button (same as market button)
+          if (overlayRef.current) {
+            const rect = targetElement.getBoundingClientRect();
+            const overlay = overlayRef.current;
+            
+            console.log('Creating cutout for trading button at:', rect);
+            
+            // Create a transparent area around the button
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const radius = Math.max(rect.width, rect.height) * 2;
+            
+            overlay.style.background = `
+              radial-gradient(circle ${radius}px at ${centerX}px ${centerY}px, transparent 0%, transparent 70%, rgba(0,0,0,0.2) 85%, rgba(0,0,0,0.55) 100%)
+            `;
+            
+            // Make the overlay non-blocking for clicks near the button
+            overlay.style.pointerEvents = 'none';
+            
+            // Add a click handler to the overlay that allows clicks to pass through to the button
+            const handleOverlayClick = (e: MouseEvent) => {
+              const target = e.target as HTMLElement;
+              
+              // Check if click is near the trading button
+              const buttonRect = targetElement.getBoundingClientRect();
+              const clickX = e.clientX;
+              const clickY = e.clientY;
+              
+              const distance = Math.sqrt(
+                Math.pow(clickX - (buttonRect.left + buttonRect.width / 2), 2) +
+                Math.pow(clickY - (buttonRect.top + buttonRect.height / 2), 2)
+              );
+              
+              if (distance < Math.max(buttonRect.width, buttonRect.height) * 3) {
+                // Click is near the button, trigger the button click
+                console.log('Overlay click near trading button, triggering button click');
+                targetElement.click();
+              }
+            };
+            
+            overlay.addEventListener('click', handleOverlayClick);
+            
+            // Store the event listener for cleanup
+            (overlay as any)._tutorialOverlayClickHandler = handleOverlayClick;
+          }
+          
+          // Add a click event listener to ensure the button is clickable
+          const handleClick = (e: Event) => {
+            console.log('Trading button clicked during tutorial');
+            // Don't stop propagation - let the button's original onClick run
+            // The button's onClick will handle both navigation and tutorial advancement
+          };
+          
+          targetElement.addEventListener('click', handleClick);
+          
+          // Store the event listener for cleanup
+          (targetElement as any)._tutorialClickHandler = handleClick;
+          
+          // Debug: Log the button's current state
+          console.log('Trading button setup complete:', {
+            element: targetElement,
+            zIndex: targetElement.style.zIndex,
+            pointerEvents: targetElement.style.pointerEvents,
+            cursor: targetElement.style.cursor,
+            hasClickHandler: !!(targetElement as any)._tutorialClickHandler
+          });
         } else if (activeTutorial === 'assetsTutorial' && stepIndex === 5 && step.highlightElement === 'wear-jewelry-button') {
           // Make the wear jewelry button prominent and clickable
           targetElement.style.zIndex = '1007';
@@ -892,32 +970,7 @@ export default function TutorialOverlay() {
             console.log('App grid not found');
           }
           
-          // Try to find the trading button with a delay (for timing issues)
-          setTimeout(() => {
-            const retryElement = document.getElementById('trading-button');
-            if (retryElement) {
-              console.log('Trading button found on retry!');
-              retryElement.classList.add('tutorial-highlight');
-              retryElement.style.zIndex = '1007';
-              retryElement.style.position = 'relative';
-              retryElement.style.transform = 'scale(1.01)';
-              retryElement.style.boxShadow = '0 2px 8px rgba(102, 255, 102, 0.2)';
-              retryElement.style.border = '2px solid #66ff66';
-              retryElement.style.borderRadius = '8px';
-              retryElement.style.filter = 'none';
-              retryElement.style.pointerEvents = 'auto';
-              retryElement.style.cursor = 'pointer';
-              
-              // Add click handler
-              const handleClick = (e: Event) => {
-                e.stopPropagation();
-                console.log('Trading button clicked during tutorial (retry)');
-                nextStep();
-              };
-              retryElement.addEventListener('click', handleClick);
-              (retryElement as any)._tutorialClickHandler = handleClick;
-            }
-          }, 500);
+
         }
       }
 
@@ -961,6 +1014,8 @@ export default function TutorialOverlay() {
           delete (el as any)._tutorialTimeoutId;
         }
         
+
+        
         // Reset z-index for all highlighted elements
         (el as HTMLElement).style.zIndex = '';
         (el as HTMLElement).style.position = '';
@@ -993,12 +1048,23 @@ export default function TutorialOverlay() {
         overlayRef.current.style.pointerEvents = 'auto';
       }
     };
-  }, [activeTutorial, stepIndex, tutorialSteps, nextStep]);
+  }, [activeTutorial, stepIndex, tutorialSteps, nextStep, stepReadyElement]);
 
   // Early return after all hooks are called
   if (!activeTutorial) return null;
   const step = tutorialSteps[activeTutorial][stepIndex] as any;
   if (!step) return null;
+  
+  // Debug logging for tutorial state
+  console.log('TutorialOverlay render:', { activeTutorial, stepIndex, stepId: step?.id, message: step?.message });
+  
+  // Additional debugging for the return-home step
+  if (activeTutorial === 'gettingStarted' && stepIndex === 9) {
+    console.log('=== RETURN-HOME STEP DEBUG ===');
+    console.log('Current step:', step);
+    console.log('Step requires click:', step.requireClick);
+    console.log('Step has noButtons:', step.noButtons);
+  }
 
   // Only show "Skip Entire Tutorial" button for the first step of gettingStarted tutorial
   const isGettingStarted = activeTutorial === 'gettingStarted';
@@ -1066,4 +1132,4 @@ export default function TutorialOverlay() {
       </div>
     </div>
   );
-} 
+}

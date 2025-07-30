@@ -20,11 +20,34 @@ interface PendingPurchase {
 
 export default function HomeScreen({ onNavigate }: HomeScreenProps) {
   const { state, resetGame, updateCash, updateInventory, addNotification, dispatch, getAssetSummary, hasBaseInCity } = useGame();
-  const { resetTutorial, nextStep, activeTutorial, stepIndex, tutorialSteps, startTutorial, skipTutorial, progress } = useTutorial();
+  const { resetTutorial, nextStep, activeTutorial, stepIndex, tutorialSteps, startTutorial, skipTutorial, progress, notifyStepReady } = useTutorial();
   // Remove systems and events, use only state and gameState
   const cash = state.cash ?? 0;
   const currentCity = state.currentCity;
   const assetSummary = getAssetSummary();
+  
+  // Notify tutorial context when Trading button is ready for step 9
+  useEffect(() => {
+    if (activeTutorial === 'gettingStarted' && stepIndex === 9) {
+      // Check if Trading button exists in DOM
+      const tradingButton = document.getElementById('trading-button');
+      if (tradingButton) {
+        console.log('Trading button found, notifying tutorial context');
+        notifyStepReady('trading-button');
+      } else {
+        // If not found, check again after a short delay
+        const checkButton = () => {
+          const button = document.getElementById('trading-button');
+          if (button) {
+            console.log('Trading button found on retry, notifying tutorial context');
+            notifyStepReady('trading-button');
+          }
+        };
+        setTimeout(checkButton, 100);
+      }
+    }
+  }, [activeTutorial, stepIndex, notifyStepReady]);
+  
   // Calculate net worth: cash + inventory value (using current city prices if available)
   const getNetWorth = () => {
     let total = state.cash || 0;
@@ -98,10 +121,40 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   const apps = [
     { id: 'travel', icon: '✈️', name: 'Travel', onClick: () => onNavigate('travel') },
-    { id: 'market', icon: '💊', name: 'Market', onClick: () => onNavigate('market'), elementId: 'market-button' },
-    { id: 'trading', icon: '💼', name: 'Trading', onClick: () => onNavigate('trading'), elementId: 'trading-button' },
+    { 
+      id: 'market', 
+      icon: '💊', 
+      name: 'Market', 
+      onClick: () => {
+        // Check if this is a tutorial click for Market button
+        if (activeTutorial === 'gettingStarted' && stepIndex === 1) {
+          const step = tutorialSteps[activeTutorial][stepIndex];
+          if (step && step.requireClick) {
+            nextStep();
+          }
+        }
+        onNavigate('market');
+      }, 
+      elementId: 'market-button' 
+    },
+    { 
+      id: 'trading', 
+      icon: '💼', 
+      name: 'Trading', 
+      onClick: () => {
+        // Check if this is a tutorial click for Trading button
+        if (activeTutorial === 'gettingStarted' && stepIndex === 9) {
+          const step = tutorialSteps[activeTutorial][stepIndex];
+          if (step && step.requireClick) {
+            nextStep();
+          }
+        }
+        onNavigate('trading');
+      }, 
+      elementId: 'trading-button' 
+    },
     { id: 'quickBuy', icon: '🛒', name: 'Quick Buy', onClick: () => setShowQuickBuyModal(true) },
-    { id: 'raid', icon: '⚔️', name: 'Base Raids', onClick: () => onNavigate('raid'), needsBase: !hasBaseInCity(currentCity) },
+    { id: 'raid', icon: '⚔️', name: 'Base Raids', onClick: () => onNavigate('raid') },
     { id: 'bases', icon: '🏢', name: 'Manage Bases', onClick: () => onNavigate('bases') },
     { id: 'gang', icon: '👥', name: 'Gang Management', onClick: () => onNavigate('gang') },
     { id: 'assets', icon: '💎', name: 'Assets', onClick: () => onNavigate('assets'), elementId: 'assets-button' },
@@ -164,50 +217,21 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
       {/* App Grid */}
       <div className="app-grid">
         {appsWithSettings.map(app => {
-          // Only for Raid Bases, show a visual cue if not qualified
-          const showWarning = app.id === 'raid' && app.needsBase;
           return (
             <button
               key={app.id}
               id={app.elementId || app.id}
-              className={`app-icon${showWarning ? ' raid-warning' : ''}`}
+              className="app-icon"
               onClick={app.onClick}
               style={{ 
                 minWidth: 80,
-                // If warning, highlight border and maybe pulse
-                border: showWarning ? '2px solid #ffcc00' : undefined,
-                boxShadow: showWarning ? '0 0 8px 2px #ffcc00' : undefined,
                 position: 'relative',
                 opacity: 1,
                 cursor: 'pointer',
               }}
-              title={showWarning ? `Requires base in ${currentCity}` : undefined}
             >
               <div style={{ fontSize: 32 }}>{app.icon}</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>{app.name}</div>
-              {/* Visual cue for Raid Bases if not qualified */}
-              {showWarning && (
-                <div style={{
-                  position: 'absolute',
-                  top: 4,
-                  right: 4,
-                  background: '#ffcc00',
-                  color: '#222',
-                  borderRadius: '50%',
-                  width: 20,
-                  height: 20,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 'bold',
-                  fontSize: 14,
-                  zIndex: 10
-                }}
-                  title={`Requires base in ${currentCity}`}
-                >
-                  !
-                </div>
-              )}
             </button>
           );
         })}

@@ -41,7 +41,8 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
 
   // Handle tutorial steps
   useEffect(() => {
-    if (activeTutorial === 'gettingStarted' && stepIndex === 11) {
+    console.log('Tutorial useEffect - activeTutorial:', activeTutorial, 'stepIndex:', stepIndex);
+    if (activeTutorial === 'gettingStarted' && stepIndex === 10) {
       const step = tutorialSteps[activeTutorial][stepIndex];
       if (step && step.id === 'sell-weed-instruction') {
         console.log('Tutorial: Showing sell instruction modal');
@@ -52,7 +53,7 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
 
   // Handle tutorial completion after selling
   useEffect(() => {
-    if (activeTutorial === 'gettingStarted' && stepIndex === 12) {
+    if (activeTutorial === 'gettingStarted' && stepIndex === 11) {
       const step = tutorialSteps[activeTutorial][stepIndex];
       if (step && step.id === 'congratulations') {
         console.log('Tutorial: Showing congratulations modal');
@@ -81,9 +82,12 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
     if (amount <= 0) return setShowBuyModal(false);
     
     // Check if this is a tutorial click for Weed purchase
+    console.log('Tutorial debug - activeTutorial:', activeTutorial, 'stepIndex:', stepIndex, 'selectedDrug:', selectedDrug, 'amount:', amount);
     if (activeTutorial === 'gettingStarted' && stepIndex === 6 && selectedDrug === 'Weed' && amount === 2) {
       const step = tutorialSteps[activeTutorial][stepIndex];
+      console.log('Tutorial step found:', step);
       if (step && step.requireClick) {
+        console.log('Advancing tutorial from weed purchase');
         nextStep();
       }
     }
@@ -143,7 +147,7 @@ const TradingScreen: React.FC<TradingScreenProps> = ({ onNavigate }) => {
     forceUpdate(x => x + 1);
     
     // Check if this is a tutorial sell all
-    if (activeTutorial === 'gettingStarted' && stepIndex === 11) {
+    if (activeTutorial === 'gettingStarted' && stepIndex === 10) {
       const step = tutorialSteps[activeTutorial][stepIndex];
       if (step && step.id === 'sell-weed-instruction') {
         console.log('Tutorial: Weed sold, advancing to congratulations');

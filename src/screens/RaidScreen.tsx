@@ -30,11 +30,19 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
   const [raidResult, setRaidResult] = useState<any>(null);
   const [showCooldownModal, setShowCooldownModal] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState('');
+  const [showBaseRequirementModal, setShowBaseRequirementModal] = useState(false);
 
   const availableGang = getAvailableGangMembers();
   const availableGangInCity = getAvailableGangMembersInCity(currentCity);
   const availableGunsInCity = getAvailableGunsInCity(currentCity);
   const targets = getAllRaidTargets(currentCity);
+
+  // Check if player has a base in current city
+  const hasBaseInCity = () => {
+    const bases = state.bases || {};
+    const cityBases = bases[currentCity] || [];
+    return cityBases.length > 0;
+  };
 
   useEffect(() => {
     // Reset gang size when switching targets
@@ -54,13 +62,6 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
         !activeTutorial && 
         availableGangInCity >= 3 && 
         availableGunsInCity >= 3) {
-      
-      // Check if player has a base in current city
-      const hasBaseInCity = () => {
-        const bases = state.bases || {};
-        const cityBases = bases[currentCity] || [];
-        return cityBases.length > 0;
-      };
       
       if (hasBaseInCity()) {
         console.log('Starting base raids tutorial - requirements met');
@@ -175,7 +176,36 @@ export default function RaidScreen({ onNavigate }: RaidScreenProps) {
       </div>
       
       {renderInventorySummary()}
-      {availableGangInCity < 3 || availableGunsInCity < 3 ? (
+      
+      {/* Check if player has a base in current city */}
+      {!hasBaseInCity() ? (
+        <div style={{
+          background: '#222',
+          border: '1px solid #444',
+          borderRadius: '10px',
+          padding: '30px',
+          textAlign: 'center',
+          marginTop: '20px'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '15px' }}>🏢</div>
+          <div style={{ fontSize: '16px', color: '#aaa', marginBottom: '10px' }}>
+            Base Required
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>
+            You need to own a base in {currentCity} before you can conduct raids
+          </div>
+          <div style={{ fontSize: '11px', color: '#888' }}>
+            💡 Tip: Purchase a base from the Manage Bases screen first
+          </div>
+          <button 
+            className="action-btn" 
+            onClick={() => onNavigate('bases')}
+            style={{ marginTop: '15px' }}
+          >
+            🏢 Go to Manage Bases
+          </button>
+        </div>
+      ) : availableGangInCity < 3 || availableGunsInCity < 3 ? (
         <div style={{
           background: '#222',
           border: '1px solid #444',
