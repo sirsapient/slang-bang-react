@@ -385,32 +385,7 @@ export default function HomeScreen({ onNavigate }: HomeScreenProps) {
           <div style={{ fontSize: '12px', color: '#aaa', marginBottom: 12 }}>
             This will erase all progress and start a new game.
           </div>
-          <button
-            className="action-btn"
-            style={{ background: '#66ff66', marginBottom: 12 }}
-            onClick={() => {
-              resetTutorial('gettingStarted');
-              setShowSettingsModal(false);
-            }}
-          >
-            Test Tutorial
-          </button>
-          <div style={{ fontSize: '12px', color: '#aaa', marginBottom: 12 }}>
-            Reset the tutorial to test it again.
-          </div>
-          <button
-            className="action-btn"
-            style={{ background: '#ffaa00', marginBottom: 12 }}
-            onClick={() => {
-              localStorage.removeItem('tutorialProgress');
-              window.location.reload();
-            }}
-          >
-            Clear Tutorial Progress
-          </button>
-          <div style={{ fontSize: '12px', color: '#aaa' }}>
-            Clear all tutorial progress and reload.
-          </div>
+
         </div>
       </Modal>
       <Modal isOpen={showResetConfirm} onClose={() => setShowResetConfirm(false)} title="Confirm Reset">
