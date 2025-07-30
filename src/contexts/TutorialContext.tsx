@@ -300,16 +300,8 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const skipTutorial = useCallback(() => {
     console.log('Skipping tutorial:', activeTutorial);
     if (activeTutorial) {
-      // If skipping from the first step of gettingStarted, only mark gettingStarted as completed
-      if (activeTutorial === 'gettingStarted' && stepIndex === 0) {
-                setProgress((prev: any) => ({
-          ...prev, 
-          gettingStarted: true
-        }));
-      } else {
-        // Otherwise just mark the current tutorial as completed
-        setProgress((prev: any) => ({ ...prev, [activeTutorial]: true }));
-      }
+      // Only mark the current tutorial as completed, not all tutorials
+      setProgress((prev: any) => ({ ...prev, [activeTutorial]: true }));
       setActiveTutorial(null);
       setStepIndex(0);
       setStepReadyElement(null);
