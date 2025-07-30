@@ -75,6 +75,7 @@ const tutorialSteps = {
       id: 'cash-warning',
       message: "You're making some serious cash now! 💰 Would be a shame if the cops took it all... Purchase some jewelry from the Assets page so you always have some cash for a rainy day.",
       requireClick: false,
+      nextButton: true,
     },
   ],
   assetsJewelryTutorial: [

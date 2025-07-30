@@ -521,6 +521,15 @@ export function GameProvider({ children }) {
   // Assets tutorial is now triggered by clicking the Asset button instead of automatically
   // This allows the user to control when they want to see the tutorial
 
+  // Monitor cash for assets tutorial trigger
+  useEffect(() => {
+    // Trigger assets tutorial when cash reaches $20k and tutorial hasn't been completed
+    if (state.cash >= 20000 && !progress.assetsTutorial && !progress.assetsJewelryTutorial) {
+      console.log('Cash reached $20k, triggering assets tutorial');
+      startTutorial('assetsTutorial');
+    }
+  }, [state.cash, progress.assetsTutorial, progress.assetsJewelryTutorial, startTutorial]);
+
   // Auto-save on every state change
   useEffect(() => {
     try {
