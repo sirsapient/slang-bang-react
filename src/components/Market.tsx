@@ -1,9 +1,9 @@
 import React from 'react';
 import { useGame, useCurrentCity } from '../contexts/GameContext.jsx';
-import { gameData } from '../game/data/gameData';
+
 
 // Accept cityPrices as a prop, but also use GameContext for reactivity
-const Market: React.FC<{ cityPrices: { [drug: string]: number } }> = ({ cityPrices }) => {
+const Market: React.FC<{ cityPrices?: { [drug: string]: number } }> = ({ cityPrices }) => {
   const { state } = useGame();
   const currentCity = useCurrentCity();
 
@@ -33,7 +33,7 @@ const Market: React.FC<{ cityPrices: { [drug: string]: number } }> = ({ cityPric
           {Object.entries(prices).map(([drug, price]) => (
             <tr key={drug}>
               <td>{drug}</td>
-              <td>{price}</td>
+                             <td>{String(price)}</td>
             </tr>
           ))}
         </tbody>

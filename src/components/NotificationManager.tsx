@@ -49,7 +49,7 @@ export const NotificationManager: React.FC<NotificationManagerProps> = ({ childr
         justifyContent: 'center',
         padding: '20px'
       }}>
-        {notifications.map((notification, index) => (
+        {notifications.map((notification) => (
           <div
             key={notification.id}
             style={{

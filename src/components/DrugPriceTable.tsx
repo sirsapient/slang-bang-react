@@ -10,7 +10,7 @@ interface DrugPriceTableProps {
 }
 
 export function DrugPriceTable({ 
-  city, 
+ 
   prices, 
   inventory = {}, 
   supply = {},

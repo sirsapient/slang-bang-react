@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useGame } from '../contexts/GameContext.jsx';
 
 interface BaseDefenseTestProps {
@@ -105,7 +105,7 @@ export default function BaseDefenseTest({ onClose }: BaseDefenseTestProps) {
             <p>No operational bases found.</p>
           ) : (
             <div>
-              {bases.map((base, index) => (
+              {bases.map((base) => (
                 <div key={base.id} style={{
                   border: '1px solid #444',
                   padding: '10px',

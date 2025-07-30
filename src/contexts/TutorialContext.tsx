@@ -300,13 +300,13 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     if (activeTutorial) {
       // If skipping from the first step of gettingStarted, only mark gettingStarted as completed
       if (activeTutorial === 'gettingStarted' && stepIndex === 0) {
-        setProgress((prev) => ({ 
+                setProgress((prev: any) => ({
           ...prev, 
           gettingStarted: true
         }));
       } else {
         // Otherwise just mark the current tutorial as completed
-        setProgress((prev) => ({ ...prev, [activeTutorial]: true }));
+        setProgress((prev: any) => ({ ...prev, [activeTutorial]: true }));
       }
       setActiveTutorial(null);
       setStepIndex(0);
@@ -322,7 +322,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
 
   // Reset specific tutorial (for testing)
   const resetTutorial = useCallback((tutorialKey: string) => {
-    setProgress((prev) => {
+    setProgress((prev: any) => {
       const newProgress = { ...prev, [tutorialKey]: false };
       // Also update localStorage immediately
       localStorage.setItem('tutorialProgress', JSON.stringify(newProgress));

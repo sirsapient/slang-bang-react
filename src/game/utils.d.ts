@@ -1,0 +1,1 @@
+export declare function formatLargeCurrency(amount: number): string; 

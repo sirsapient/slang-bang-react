@@ -61,7 +61,7 @@ export default function TutorialOverlay() {
   useEffect(() => {
     if (!activeTutorial) return;
     
-    const step = tutorialSteps[activeTutorial][stepIndex];
+    const step = tutorialSteps[activeTutorial as keyof typeof tutorialSteps][stepIndex];
     if (!step) return;
 
     // Special handling for assets tutorial - monitor jewelry purchases
@@ -178,9 +178,9 @@ export default function TutorialOverlay() {
           // Ensure the app grid container is also clickable
           const appGrid = targetElement.closest('.app-grid');
           if (appGrid) {
-            appGrid.style.zIndex = '1006';
-            appGrid.style.position = 'relative';
-            appGrid.style.pointerEvents = 'auto';
+            (appGrid as HTMLElement).style.zIndex = '1006';
+            (appGrid as HTMLElement).style.position = 'relative';
+            (appGrid as HTMLElement).style.pointerEvents = 'auto';
           }
           
           // Create a transparent cutout around the trading button
@@ -853,14 +853,14 @@ export default function TutorialOverlay() {
         }
         
         // Reset z-index for all highlighted elements
-        el.style.zIndex = '';
-        el.style.position = '';
-        el.style.filter = '';
-        el.style.pointerEvents = '';
-        el.style.transform = '';
-        el.style.boxShadow = '';
-        el.style.border = '';
-        el.style.cursor = '';
+        (el as HTMLElement).style.zIndex = '';
+        (el as HTMLElement).style.position = '';
+        (el as HTMLElement).style.filter = '';
+        (el as HTMLElement).style.pointerEvents = '';
+        (el as HTMLElement).style.transform = '';
+        (el as HTMLElement).style.boxShadow = '';
+        (el as HTMLElement).style.border = '';
+        (el as HTMLElement).style.cursor = '';
         
         // Reset pointer events for children
         const children = el.querySelectorAll('*');

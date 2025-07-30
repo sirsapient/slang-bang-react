@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame } from './contexts/GameContext.jsx';
 import { useTutorial } from './contexts/TutorialContext';
 import { Modal } from './components/Modal';

@@ -61,7 +61,6 @@ const NotificationPopup: React.FC<NotificationPopupProps> = ({
         position: 'fixed', // Changed from absolute to fixed
         top: '50%', // Center vertically
         left: '50%', // Center horizontally
-        transform: 'translate(-50%, -50%)', // Perfect centering
         background: styles.background,
         border: `2px solid ${styles.borderColor}`,
         borderRadius: '8px',
@@ -74,7 +73,7 @@ const NotificationPopup: React.FC<NotificationPopupProps> = ({
         minWidth: '300px', // Added min width
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)', // Enhanced shadow
         opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.9)', // Added scale animation
+        transform: isVisible ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.9)',
         transition: 'opacity 0.5s ease, transform 0.5s ease', // Increased transition duration
         display: 'flex',
         alignItems: 'center',

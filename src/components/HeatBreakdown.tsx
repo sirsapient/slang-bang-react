@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useGame } from '../contexts/GameContext';
 
 interface HeatBreakdownProps {
@@ -78,7 +78,7 @@ export default function HeatBreakdown({ showDetails = false }: HeatBreakdownProp
           {breakdown.breakdown.baseHeatDetails.length > 0 && (
             <div style={{ marginTop: '8px', padding: '8px', background: '#222', borderRadius: '4px' }}>
               <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '4px' }}>Base Heat Sources:</div>
-              {breakdown.breakdown.baseHeatDetails.map((detail, index) => (
+              {breakdown.breakdown.baseHeatDetails.map((detail) => (
                 <div key={index} style={{ fontSize: '10px', color: '#ccc', marginBottom: '2px' }}>
                   {detail.city} (Level {detail.level}): {detail.totalHeat}%
                   {detail.fortressBonus > 0 && ` (+${detail.fortressBonus}% Drug Fortress)`}
