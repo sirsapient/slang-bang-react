@@ -61,7 +61,7 @@ export default function TutorialOverlay() {
   useEffect(() => {
     if (!activeTutorial) return;
     
-    const step = tutorialSteps[activeTutorial as keyof typeof tutorialSteps][stepIndex];
+    const step = tutorialSteps[activeTutorial as keyof typeof tutorialSteps][stepIndex] as any;
     if (!step) return;
 
     // Special handling for assets tutorial - monitor jewelry purchases
@@ -142,8 +142,86 @@ export default function TutorialOverlay() {
           }
         }
         
-        // Special handling for trading button (step 10 in gettingStarted tutorial)
-        if (activeTutorial === 'gettingStarted' && stepIndex === 10 && step.highlightElement === 'trading-button') {
+        // Special handling for market button (step 1 in gettingStarted tutorial)
+        if (activeTutorial === 'gettingStarted' && stepIndex === 1 && step.highlightElement === 'market-button') {
+          // Make the market button prominent and clickable
+          targetElement.style.zIndex = '1007';
+          targetElement.style.position = 'relative';
+          targetElement.style.transform = 'scale(1.01)';
+          targetElement.style.boxShadow = '0 2px 8px rgba(102, 255, 102, 0.2)';
+          targetElement.style.border = '2px solid #66ff66';
+          targetElement.style.borderRadius = '8px';
+          targetElement.style.filter = 'none';
+          targetElement.style.pointerEvents = 'auto';
+          targetElement.style.cursor = 'pointer';
+          
+          // Force all children to be clickable
+          const children = targetElement.querySelectorAll('*');
+          children.forEach(child => {
+            if (child instanceof HTMLElement) {
+              child.style.pointerEvents = 'auto';
+              child.style.cursor = 'pointer';
+            }
+          });
+          
+          // Create a transparent cutout around the market button
+          if (overlayRef.current) {
+            const rect = targetElement.getBoundingClientRect();
+            const overlay = overlayRef.current;
+            
+            console.log('Creating cutout for market button at:', rect);
+            
+            // Create a transparent area around the button
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const radius = Math.max(rect.width, rect.height) * 2;
+            
+            overlay.style.background = `
+              radial-gradient(circle ${radius}px at ${centerX}px ${centerY}px, transparent 0%, transparent 70%, rgba(0,0,0,0.2) 85%, rgba(0,0,0,0.55) 100%)
+            `;
+            
+            // Make the overlay non-blocking for clicks near the button
+            overlay.style.pointerEvents = 'none';
+            
+            // Add a click handler to the overlay that allows clicks to pass through to the button
+            const handleOverlayClick = (e: MouseEvent) => {
+              const target = e.target as HTMLElement;
+              
+              // Check if click is near the market button
+              const buttonRect = targetElement.getBoundingClientRect();
+              const clickX = e.clientX;
+              const clickY = e.clientY;
+              
+              const distance = Math.sqrt(
+                Math.pow(clickX - (buttonRect.left + buttonRect.width / 2), 2) +
+                Math.pow(clickY - (buttonRect.top + buttonRect.height / 2), 2)
+              );
+              
+              if (distance < Math.max(buttonRect.width, buttonRect.height) * 3) {
+                // Click is near the button, trigger the button click
+                console.log('Overlay click near market button, triggering button click');
+                targetElement.click();
+              }
+            };
+            
+            overlay.addEventListener('click', handleOverlayClick);
+            
+            // Store the event listener for cleanup
+            (overlay as any)._tutorialOverlayClickHandler = handleOverlayClick;
+          }
+          
+          // Add a click event listener to ensure the button is clickable
+          const handleClick = (e: Event) => {
+            console.log('Market button clicked during tutorial');
+            // Don't stop propagation - let the button's original onClick run
+            // The button's onClick will handle both navigation and tutorial advancement
+          };
+          
+          targetElement.addEventListener('click', handleClick);
+          
+          // Store the event listener for cleanup
+          (targetElement as any)._tutorialClickHandler = handleClick;
+        } else if (activeTutorial === 'gettingStarted' && stepIndex === 10 && step.highlightElement === 'trading-button') {
           // Make the trading button prominent and clickable (minimal glow, contained effect)
           targetElement.style.zIndex = '1007';
           targetElement.style.position = 'relative';
@@ -701,11 +779,13 @@ export default function TutorialOverlay() {
           targetElement.style.borderRadius = '6px';
           targetElement.style.filter = 'none';
           targetElement.style.pointerEvents = 'auto';
+          targetElement.style.cursor = 'pointer';
           
           const children = targetElement.querySelectorAll('*');
           children.forEach(child => {
             if (child instanceof HTMLElement) {
               child.style.pointerEvents = 'auto';
+              child.style.cursor = 'pointer';
             }
           });
           
@@ -716,11 +796,40 @@ export default function TutorialOverlay() {
             
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
-            const radius = Math.max(rect.width, rect.height) * 1.5;
+            const radius = Math.max(rect.width, rect.height) * 2;
             
             overlay.style.background = `
-              radial-gradient(circle ${radius}px at ${centerX}px ${centerY}px, transparent 0%, transparent 60%, rgba(0,0,0,0.2) 80%, rgba(0,0,0,0.55) 100%)
+              radial-gradient(circle ${radius}px at ${centerX}px ${centerY}px, transparent 0%, transparent 70%, rgba(0,0,0,0.2) 85%, rgba(0,0,0,0.55) 100%)
             `;
+            
+            // Make the overlay non-blocking for clicks near the highlighted element
+            overlay.style.pointerEvents = 'none';
+            
+            // Add a click handler to the overlay that allows clicks to pass through to the highlighted element
+            const handleOverlayClick = (e: MouseEvent) => {
+              const target = e.target as HTMLElement;
+              
+              // Check if click is near the highlighted element
+              const elementRect = targetElement.getBoundingClientRect();
+              const clickX = e.clientX;
+              const clickY = e.clientY;
+              
+              const distance = Math.sqrt(
+                Math.pow(clickX - (elementRect.left + elementRect.width / 2), 2) +
+                Math.pow(clickY - (elementRect.top + elementRect.height / 2), 2)
+              );
+              
+              if (distance < Math.max(elementRect.width, elementRect.height) * 3) {
+                // Click is near the element, trigger the element click
+                console.log('Overlay click near highlighted element, triggering element click');
+                targetElement.click();
+              }
+            };
+            
+            overlay.addEventListener('click', handleOverlayClick);
+            
+            // Store the event listener for cleanup
+            (overlay as any)._tutorialOverlayClickHandler = handleOverlayClick;
           }
         }
         
@@ -888,7 +997,7 @@ export default function TutorialOverlay() {
 
   // Early return after all hooks are called
   if (!activeTutorial) return null;
-  const step = tutorialSteps[activeTutorial][stepIndex];
+  const step = tutorialSteps[activeTutorial][stepIndex] as any;
   if (!step) return null;
 
   // Only show "Skip Entire Tutorial" button for the first step of gettingStarted tutorial
