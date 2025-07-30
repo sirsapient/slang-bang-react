@@ -29,10 +29,8 @@ export function formatLargeCurrency(amount) {
         return '$' + (amount / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
     } else if (amount >= 1000000) {
         return '$' + (amount / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
-    } else if (amount >= 1000) {
-        return '$' + (amount / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
     } else {
-        return '$' + amount.toString();
+        return '$' + amount.toLocaleString();
     }
 }
 
